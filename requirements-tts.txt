@@ -1,0 +1,6 @@
+# Install the CPU build of torch first (see README.md).
+kokoro==0.9.4
+misaki[zh]==0.9.4
+soundfile>=0.13,<0.14
+transformers>=4.51,<5
+numpy>=1.26,<3

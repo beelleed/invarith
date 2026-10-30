@@ -1,0 +1,27 @@
+{
+  "name": "invarith",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Evidence-driven Python verification and debugging mentorship",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env backend/server.mjs",
+    "dev": "node --env-file-if-exists=.env --watch backend/server.mjs",
+    "build:locales": "node scripts/build-locales.mjs",
+    "prestart": "npm run build",
+    "predev": "npm run build",
+    "build:ui": "node scripts/build-ui.mjs",
+    "build": "npm run build:locales && npm run build:ui"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "parse5": "^8.0.1"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

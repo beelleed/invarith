@@ -1,0 +1,43 @@
+node_modules/
+.next/
+dist/
+.venv/
+.venv-tts/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.env
+.env.*
+!.env.example
+!.env.meta.example
+coverage/
+.DS_Store
+Thumbs.db
+data/
+
+# Local test output, screenshots and browser profiles
+artifacts/
+*.log
+.cache/
+.modal/
+.modal.toml
+
+# Rebuilt by npm start
+frontend/react-shell.mjs
+frontend/localized/
+
+# Local credentials and databases
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+
+# Local development checks, test suites and historical reports
+backend/tests/
+backend/check-*.mjs
+backend/evaluate-*.mjs
+backend/evaluation-fixtures.mjs
+docs/
