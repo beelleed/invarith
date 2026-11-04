@@ -132,6 +132,8 @@ In **Learning records → My learning notebook → Saved solution plans**, searc
 
 The question column has **Question**, **Plan**, **Notes** and **Practice options** tabs. Interview, lesson, retry and related-question actions live in Practice options. Your code editor stays visible above **Results**, **My tests**, **Debug journal**, **Explain aloud**, **Versions** and **AI assistant**. Panels keep their mounted state when switched; leaving the oral panel stops microphone capture and audio playback.
 
+Public examples and failing cases show named inputs, expected return values and observed values as separate fields. OA custom tests use the same visual case editor as verification; raw JSON is available only through the collapsed advanced editor.
+
 Use Ctrl/Command + Enter in the practice editor to run public examples, or add Shift to submit to hidden tests. These shortcuts do not trigger the separate verification workspace. Tab lists also support arrow keys, Home and End. Running public or hidden tests opens Results automatically.
 
 Code inputs offer **Code editor** and **Whiteboard mode**. The code editor provides syntax highlighting, paired brackets and quotes, automatic indentation, undo/redo, and completion suggestions for language keywords, common standard libraries and names in the current document. Use Ctrl/Command + Space to open suggestions and Tab to accept one or indent. Suggestions are local; they do not send code to an AI service or inspect arbitrary installed packages. Whiteboard mode keeps plain text and manual indentation. Switching modes preserves the source, and each workspace remembers its mode in this browser.

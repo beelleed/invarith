@@ -337,6 +337,7 @@ export const messages = {
   "A good day of practice.": "今天也累積了一點進步。",
   "Make room for one small win.": "從一個小小的突破開始。",
   "Practice a different question or revisit an earlier one.": "練一道新題，或回頭把之前的題目想清楚。",
+  "Empty list": "空串列",
   "Question practiced": "練過的題目",
   "Question due for review": "題待複習",
   "Questions practiced": "練過的題目",
