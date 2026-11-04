@@ -378,3 +378,11 @@ html[data-theme=dark] body>dialog{color-scheme:dark;background:#24252d;color:#d9
 .product-shell .account-popover details>summary::after{content:'';width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);flex:none;margin:0 3px 4px}
 .product-shell .account-popover details[open]>summary::after{transform:rotate(225deg);margin-bottom:0}
 @media(max-width:480px){.product-shell .practice-library-search{grid-template-columns:minmax(0,1fr)}.product-shell .practice-library-search>button{justify-self:start}.product-shell .learning-progress-strip>label{margin-left:0}}
+
+/* A quiet execution action: distinguish it without a saturated fill. */
+.product-shell{--run-bg:#eee9f4;--run-hover:#e4dbee;--run-border:#d5c9e1;--run-text:#5b456f}
+.product-shell.assessment-dark{--run-bg:#34303c;--run-hover:#40384a;--run-border:#594b6c;--run-text:#dfd1ee}
+.product-shell #run-button{background:var(--run-bg);border:1px solid var(--run-border);color:var(--run-text);box-shadow:none;transition:background-color .15s,border-color .15s}
+.product-shell #run-button:hover:not(:disabled){background:var(--run-hover);border-color:var(--ui-accent)}
+.product-shell #run-button:focus-visible{outline:2px solid var(--ui-accent);outline-offset:3px}
+.product-shell #run-button:disabled{opacity:.5;cursor:wait;box-shadow:none}
