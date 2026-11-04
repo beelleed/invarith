@@ -1,8 +1,15 @@
+import {formatDateTime,formatTime} from './date-format.mjs';
+import {initVerificationTasks} from './verification-tasks.mjs';
+import {reportPresentation} from './report-localization.mjs';
+import {confirmAction} from './confirm-action.mjs';
+import {codeLanguages,languageStarter,languageInstructions} from './code-languages.mjs';
 import {libraryProblem} from './problem-library.mjs';
 import { lessonVerificationDraft, captureEditorDraft, restoreEditorDraft } from './lesson-verification.mjs';
 import { initWorkspaceLayout, revealWorkspace } from './workspace-layout.mjs';
 import { t, locale, initLanguageLinks } from './i18n.mjs';
 initLanguageLinks();
+const hintLanguage=locale==='zh-TW'?'zh-TW':'en-US';
+const matchesHintLanguage=hint=>(hint?.language||'en-US')===hintLanguage;
 // Migrate only unchanged bundled examples; preserve user-authored drafts.
 const legacyExampleCodes = ["# \u8a08\u7b97\u6e05\u55ae\u5e73\u5747\u503c；\u7a7a\u6e05\u55ae\u61c9\u56de\u50b3 0\n# \u8a66\u8457\u627e\u51fa\u6c92\u6709\u88ab\u8655\u7406\u7684\u908a\u754c\u60c5\u6cc1。\n\ndef average(numbers):\n    total = sum(numbers)\n    return total / len(numbers)\n","# \u56de\u50b3\u6e05\u55ae\u4e2d\u7684\u7b2c\u4e00\u500b\u5076\u6578；\u627e\u4e0d\u5230\u5247\u56de\u50b3 None。\n\ndef first_even(numbers):\n    for i in range(len(numbers) - 1):\n        if numbers[i] % 2 == 0:\n            return numbers[i]\n    return None\n","# \u5ffd\u7565\u5927\u5c0f\u5beb\u8207\u7a7a\u683c，\u5224\u65b7\u6587\u5b57\u662f\u5426\u70ba\u56de\u6587。\n\ndef is_palindrome(text):\n    normalized = text.lower()\n    return normalized == normalized[::-1]\n"];
 import { challengePacks, appendChallenge, caseKey, compareRuns, codeDiff, canonical } from './evidence-tools.mjs';
@@ -61,8 +68,10 @@ let requirementDraft=null,requirementPhase=null;
 let mutationBusy=false;
 let interviewUI=null;
 let walkthroughUI=null;
-const selectedExecution=()=>$('#execution-backend').value;
+let verificationTasks=null;
+const selectedExecution=()=>$('#code-language').value!=='python'?'docker':$('#execution-backend').value;
 function syncExecution(){
+  $('#code-language').disabled=busy||planBusy||confirmingPlan||historyBusy;
   const selected=selectedExecution(),provider=health?.runners?.[selected] || (selected==='docker'?health?.runner:null);
   $('#execution-backend').disabled=busy || hintBusy || mentorBusy || planBusy || confirmingPlan || historyBusy;
   $('#execution-choice-note').textContent=selected==='modal'?t("Modal selected: the submitted code and tests go to Modal. A new CPU Sandbox uses Modal credits; outbound network is blocked and lifetime is capped at 30s after startup. Cold starts can take longer. No automatic Docker fallback."):t("Local Docker selected: execution stays on this computer. Viewing history or reports does not start a cloud job.");
@@ -81,7 +90,7 @@ function renderMutations(){
   $('#check-mutations').textContent=mutationBusy?t("Checking isolated variants…"):report?t("Reopen saved test check"):t("Check my tests");
   $('#mutation-status').textContent=!evidence?t("Complete a passing run first."):stale()?t("Editor changed. Rerun this version before checking its tests."):!passing?t("Resolve the current failing cases first."):report?t("Saved evidence below. Reopening starts no execution."):!health?.runners?.docker?.ready?t("Start local Docker to check your tests."):t("Ready for a bounded local check. No model request or cloud job.");
   const target=$('#mutation-results');if(!report){target.replaceChildren();return;}
-  const parts=[node('h3','',report.status==='baseline_changed'?t("Original passing result did not reproduce"):report.status==='no_supported_mutations'?t("No supported comparisons found"):t("What your tests noticed")),node('p','',report.note || ''),node('p','mutation-provenance',t("Source run {0} · {1} · Local Docker · Saved evidence{2}", report.sourceRunId, new Date(report.createdAt).toLocaleString('en-US'), stale()?' · Previous submission; editor has changed.':''))];
+  const parts=[node('h3','',report.status==='baseline_changed'?t("Original passing result did not reproduce"):report.status==='no_supported_mutations'?t("No supported comparisons found"):t("What your tests noticed")),node('p','',report.note || ''),node('p','mutation-provenance',t("Source run {0} · {1} · Local Docker · Saved evidence{2}", report.sourceRunId, formatDateTime(report.createdAt), stale()?' · Previous submission; editor has changed.':''))];
   const totals=node('div','requirement-totals');
   for(const [status,label] of [['detected',t("Detected output changes")],['survived',t("Still passed")],['execution_error',t("Raised errors")],['inconclusive','Inconclusive'],['not_run',t("Not run")]]){const count=report.variants.filter(item=>item.status===status).length;if(count)totals.append(node('span','',`${count} ${label}`));}parts.push(totals);
   const labels={detected:t("Detected by your tests"),survived:t("Still passed · Review this gap"),execution_error:t("Variant raised an error"),inconclusive:t("No execution conclusion"),not_run:t("Not run · Budget reached")};
@@ -245,14 +254,14 @@ function renderSecurity() {
   const changed=selected.code!==$('#code').value;
   const status=node('p','security-status',`${changed ? t("SOURCE CHANGED · Review again. Results below describe earlier source. ") : ''}${selected.savedWithRun ? t("Saved with verification history.") : t("Preview only · Not yet saved with a verification run.")}`);
   const parts=[status];
-  if(report.status!=='completed')parts.push(node('h3','',t("Static review not completed")),node('p','',report.reason || t("The scanner was unavailable.")),node('p','',report.errorLine ? t("Syntax error at line {0}. Fix it and review again.", report.errorLine) : t("No security conclusion is available.")));
+  if(report.status!=='completed')parts.push(node('h3','',t("Static review not completed")),node('p','',t(report.reason) || t("The scanner was unavailable.")),node('p','',report.errorLine ? t("Syntax error at line {0}. Fix it and review again.", report.errorLine) : t("No security conclusion is available.")));
   else {
     parts.push(node('h3','',report.findings.length ? t("{0} static warning(s) to review", report.findings.length) : t("No warnings in the checked rule families")),node('p','',t("{0} v{1} · {2} rule families · {3}Exploitability not verified{4}", report.engine, report.version, report.rulesChecked.length, report.execution==='modal-python'?'Modal cloud review · ':report.execution==='docker-python'?'Local Docker review · ':'', report.truncated ? ' · Finding limit reached; report is incomplete' : '')));
     for(const finding of report.findings){
-      const card=node('article','security-finding');card.append(node('h3','',t("{0} · Line {1}:{2} · {3}", finding.ruleId, finding.line, finding.column, finding.title)),node('pre','',finding.snippet),node('p','',finding.reason),node('strong','',t("Review / mitigation")),node('p','',finding.guidance));
+      const card=node('article','security-finding');card.append(node('h3','',t("{0} · Line {1}:{2} · {3}", finding.ruleId, finding.line, finding.column, t(finding.title))),node('pre','',finding.snippet),node('p','',t(finding.reason)),node('strong','',t("Review / mitigation")),node('p','',t(finding.guidance)));
       const reference=node('a','',t("Python documentation ↗"));reference.href=finding.reference;reference.target='_blank';reference.rel='noopener noreferrer';card.append(reference);parts.push(card);
     }
-    parts.push(node('p','security-limit',report.limitations));
+    parts.push(node('p','security-limit',t(report.limitations)));
   }
   const jump=node('button','text-button',t("Inspect source code →"));jump.addEventListener('click',()=>{ $('#code').scrollIntoView({block:'center'});$('#code').focus({preventScroll:true}); });parts.push(jump);target.replaceChildren(...parts);
 }
@@ -330,7 +339,7 @@ function renderLearning() {
       const values = node('div', 'learning-comparison');
       for (const [title,text] of [[t("YOUR PREDICTION"),outputLabel(learning.prediction.value)],[t("PYTHON OBSERVED"),result.status === 'error' ? result.error : outputLabel(result.actual)],[t("TEST EXPECTATION"),outputLabel(test.expected)]]) { const item=node('div'); item.append(node('small','',title),node('pre','',text)); values.append(item); }
       observed.append(values, node('p', '', result.status === 'error' ? t("Python raised an error. The prediction was a return value, not an error prediction.") : canonical(learning.prediction.value) === canonical(result.actual) ? t("Your prediction matched this execution. That does not establish that the implementation meets the requirement.") : t("Your prediction differed from this execution. Which part of the code explains the difference?")));
-      observed.append(node('small','', t("Prediction submitted before this run · {0}{1}", new Date(learning.prediction.capturedAt).toLocaleString('en-US'), stale() ? ' · Editor changed; this discussion belongs to the saved run.' : '')));
+      observed.append(node('small','', t("Prediction submitted before this run · {0}{1}", formatDateTime(learning.prediction.capturedAt), stale() ? ' · Editor changed; this discussion belongs to the saved run.' : '')));
       observed.append(node('small','',learning.prediction.participation==='personal' ? t("Included in personal practice · Self-selected, not a skill assessment") : t("Demonstration or unclassified practice · Excluded from personal Learning Memory")));
       const label = node('label','case-input-label',t("3. Explain your reasoning")), answer = node('textarea','case-value-input'); answer.id='learner-answer'; answer.rows=4; answer.maxLength=4000; answer.value=learnerDraft.answerRunId===evidence.id ? learnerDraft.answer : learning.answer || ''; answer.disabled=disabled;
       answer.addEventListener('input', () => { learnerDraft.answer=answer.value; learnerDraft.answerRunId=evidence.id; saveDraft(); const notice=$('#reflection-status'); if (notice) notice.textContent=t("Draft changed · Save your explanation before requesting feedback."); const button=$('#reflection-feedback'); if (button) button.disabled=true; const prior=$('#reflection-result'); if (prior) prior.hidden=true; }); label.append(answer);
@@ -339,7 +348,7 @@ function renderLearning() {
       feedback.addEventListener('click',requestReflection);
       const status=node('p','',t("Saved explanations and feedback stay with this run.")); status.id='reflection-status';
       observed.append(label,save,status,feedback,node('p','learning-disclosure',t("Optional: sends this run’s code, selected test, observed result, prediction and explanation to {0}. Uses API credits when clicked. Identical saved feedback is reused.", health?.ai.model || 'your configured provider')));
-      const saved=Object.values(learning.feedback || {}).filter(item=>item.answer===learning.answer).at(-1);
+      const saved=Object.values(learning.feedback || {}).filter(item=>item.answer===learning.answer&&matchesHintLanguage(item)).at(-1);
       if (saved && answer.value.trim()===learning.answer) { const section=node('section','reflection-result'); section.id='reflection-result'; section.append(node('h3','',t("4. AI reflection · Not verified")),node('p','',saved.text),node('small','',t("{0} · {1} total tokens · Saved feedback · No new execution", saved.model, saved.totalTokens ?? 'Unknown'))); observed.append(section); }
     }
     parts.push(observed);
@@ -357,11 +366,12 @@ async function saveExplanation() {
 async function requestReflection() {
   if (mentorBusy || busy || !evidence || !learning.answer) return;
   const runId=evidence.id, answer=learning.answer; mentorBusy=true; renderLearning();
-  try { const result=await api('/api/mentor/feedback',{runId}); if (evidence?.id===runId && learning.answer===answer) { learning.feedback={...learning.feedback,[result.createdAt]:result}; toast(result.cached ? t("Saved feedback reused. No new model call.") : t("AI reflection saved. Rerun tests to verify any changes.")); } } catch(error) { toast(error.message,true); }
+  try { const result=await api('/api/mentor/feedback',{runId,language:hintLanguage}); if (evidence?.id===runId && learning.answer===answer) { learning.feedback={...learning.feedback,[result.createdAt]:result}; toast(result.cached ? t("Saved feedback reused. No new model call.") : t("AI reflection saved. Rerun tests to verify any changes.")); } } catch(error) { toast(error.message,true); }
   finally { mentorBusy=false; renderLearning(); await refreshMemory(); }
 }
 
 async function saveWorkspace() {
+  verificationTasks?.changed();
   try {
     await api('/api/history/workspace', { activeRunId: evidence?.id || null, baselineRunId: baseline?.evidence.id || null });
     $('#history-status').textContent = t("Workspace saved · Reopen this page to continue.");
@@ -373,7 +383,7 @@ async function refreshHistory(restore = false) {
     const data = await api('/api/history');
     const cards = data.runs.map(run => {
       const card = node('article', 'history-card');
-      card.append(node('strong', '', run.functionName), node('p', '', t("{0}/{1} passed · {2} · {3} · {4} saved hints", run.passed, run.total, new Date(run.createdAt).toLocaleString('en-US'), run.execution==='modal-python'?'Modal cloud CPU':run.execution==='docker-python'?'Local Docker':'Environment not recorded', run.hintCount)));
+      card.append(node('strong', '', run.functionName), node('p', '', t("{0}/{1} passed · {2} · {3} · {4} saved hints", run.passed, run.total, formatDateTime(run.createdAt), run.execution==='modal-python'?'Modal cloud CPU':run.execution==='docker-python'?'Local Docker':'Environment not recorded', run.hintCount)));
       const open = node('button', 'secondary-button', evidence?.id === run.id ? t("Reopen this saved run") : t("Open saved run")); open.disabled = busy || hintBusy || planBusy || confirmingPlan || historyBusy;
       open.addEventListener('click', () => openSavedRun(run.id));
       const reuse=node('button','text-button',t("Reuse tests with my code"));reuse.disabled=open.disabled;reuse.addEventListener('click',()=>previewRegression(run.id));card.append(open,reuse); return card;
@@ -388,6 +398,7 @@ async function refreshHistory(restore = false) {
 async function openSavedRun(id, automatic = false, selectedBaseline) {
   $('#lesson-import-note').hidden=true;
   if (busy || hintBusy || planBusy || confirmingPlan || historyBusy || mentorBusy) return;
+  if(!automatic)verificationTasks?.reset();
   const snapshot = currentSnapshot(); historyBusy = true; busy = true;
   $('#run-button').disabled = true;
   syncHint(); syncAgent(); syncChallenge(); renderRepairJourney();
@@ -402,12 +413,13 @@ async function openSavedRun(id, automatic = false, selectedBaseline) {
       $('#function-name').value = record.submission.functionName; $('#cases').value = JSON.stringify(record.submission.cases, null, 2);
       selectedExample = null; confirmedContract = null; challengeProvenance = null;
     }
+    $('#code-language').value=record.submission.codeLanguage||'python';$('#code').dataset.codeLanguage=$('#code-language').value;queueMicrotask(()=>syncCodeLanguage());
     evidence = record.evidence; runSnapshot = JSON.stringify(record.submission); baseline = savedBaseline; learning=record.mentor || {};
     replaySuite=savedReplay;
     if(!automatic || !hasDraft)selectedPracticeId=learning.prediction?.practiceId || null;
     if (learnerDraft.answerRunId!==evidence.id) { learnerDraft.answer=learning.answer || ''; learnerDraft.answerRunId=evidence.id; }
     hints = {}; hintDetails = {};
-    for (const hint of Object.values(record.hints || {})) { hints[hint.level] = hint.hint; hintDetails[hint.level] = hint; }
+    for (const hint of Object.values(record.hints || {}).filter(matchesHintLanguage)) { hints[hint.level] = hint.hint; hintDetails[hint.level] = hint; }
     restoredEvidence = true; runProvenance = null; repairJourney = null; agentPlan = null; planSnapshot = null; reviewedPlan = null; securityPreview=null;
     renderAgentPlan(); displayResults();
     if (!automatic) { await saveWorkspace(); $('#evidence-heading').scrollIntoView({ block: 'start' }); }
@@ -435,23 +447,27 @@ function toast(message, error = false) {
   toastTimer = setTimeout(() => { $('#toast').hidden = true; }, error ? 9000 : 4500);
 }
 
+document.addEventListener('workspace-view-changed',()=>{clearTimeout(toastTimer);const notice=$('#toast');if(notice)notice.hidden=true;});
+
 function current() {
-  return { code: $('#code').value, functionName: $('#function-name').value.trim(), intent: $('#intent').value.trim(), cases: JSON.parse($('#cases').value) };
+  return { ...($('#code-language').value!=='python'?{codeLanguage:$('#code-language').value}:{}),code: $('#code').value, functionName: $('#function-name').value.trim(), intent: $('#intent').value.trim(), cases: JSON.parse($('#cases').value) };
 }
 function currentSnapshot() { try { return JSON.stringify(current()); } catch { return null; } }
 function stale() { try { return evidence && canonical(current()) !== canonical(JSON.parse(runSnapshot)); } catch { return Boolean(evidence); } }
 
 function saveDraft() {
+  verificationTasks?.changed();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
-      localStorage.setItem('invarith-draft-v1', JSON.stringify({ code: $('#code').value, functionName: $('#function-name').value, intent: $('#intent').value, cases: $('#cases').value, exampleName: selectedExample, confirmedContract, challengeEnabled: Boolean(challengeProvenance), learnerDraft, selectedPracticeId }));
+      localStorage.setItem('invarith-draft-v1', JSON.stringify({ codeLanguage:$('#code-language').value,code: $('#code').value, functionName: $('#function-name').value, intent: $('#intent').value, cases: $('#cases').value, exampleName: selectedExample, confirmedContract, challengeEnabled: Boolean(challengeProvenance), learnerDraft, selectedPracticeId }));
       $('#draft-dot').title = t("Draft saved in this browser");
     } catch { $('#draft-dot').title = t("Draft storage is unavailable in this browser"); }
   }, 300);
 }
 
 function editorChanged() {
+  document.querySelector('.studio-app')?.classList.toggle('non-python-editor',$('#code-language').value!=='python');
   $('#lesson-import-note h3').textContent=evidence&&!stale()?t('Lesson solution · Evidence collected for supplied cases'):t('Lesson solution · Not verified yet');
   for (const button of document.querySelectorAll('.history-card button')) button.disabled = busy || hintBusy || planBusy || confirmingPlan || historyBusy;
   const count = $('#code').value.split('\n').length;
@@ -492,7 +508,7 @@ function renderEvidenceNextStep() {
     const mentor = node('button', 'text-button', t("Need a hint? Open mentor")); mentor.addEventListener('click', () => $('#mentor-heading').scrollIntoView({ block: 'start' })); parts.push(mentor);
   }
   target.replaceChildren(...parts);
-  const notice = $('#evidence-snapshot-note'); if (notice) notice.textContent = stale() ? t("PREVIOUS RUN · Editor changed. These outputs have not been rerun.") : restoredEvidence ? t("SAVED EVIDENCE · Executed {0}. Reopened without rerunning code.", new Date(evidence.createdAt).toLocaleString('en-US')) : t("OBSERVED OUTPUTS · Executed by Python, checked against the supplied expectations.");
+  const notice = $('#evidence-snapshot-note'); if (notice) notice.textContent = stale() ? t("PREVIOUS RUN · Editor changed. These outputs have not been rerun.") : restoredEvidence ? t("SAVED EVIDENCE · Executed {0}. Reopened without rerunning code.", formatDateTime(evidence.createdAt)) : t("OBSERVED OUTPUTS · Executed by {0}, checked against the supplied expectations.",codeLanguages.find(row=>row.id===(latestSubmission().codeLanguage||'python'))?.label||'Python');
 }
 
 function latestSubmission() { return JSON.parse(runSnapshot); }
@@ -507,24 +523,24 @@ function renderRepairJourney() {
   const stage = !sameSuite ? 'scope' : !repairJourney.before ? 'run' : completed?.complete ? 'done' : !repairJourney.hintShown ? 'hint' : submission.code === repairJourney.before.submission.code ? 'edit' : 'rerun';
   const copy = {
     scope: [t("Keep the original expectations"), t("The function, intent, or test cases changed. Restart this demo to compare the same three checks.")],
-    run: ['1. Find the failing boundary', t("The reviewed examples expect 60 at $499, 0 at $500, and 0 at $501. Run Python to see what this implementation returns.")],
-    hint: ['2. Explain the mismatch', t("Inspect the observed results below, then reveal a question to guide your fix.")],
-    edit: ['3. Make your own repair', t("Edit the condition in Your code below. Keep the intent and all three expected values unchanged.")],
-    rerun: ['4. Verify your repair', t("Run the same three cases again. Editing code alone does not prove the bug is fixed.")],
-    done: [t("Repair verified on the same 3 tests"), `${completed?.fixed || 0} failing case(s) now pass; all 3 supplied cases pass. Broader behavior remains unverified.`],
+    run: [t('1. Find the failing boundary'), t("The reviewed examples expect 60 at $499, 0 at $500, and 0 at $501. Run Python to see what this implementation returns.")],
+    hint: [t('2. Explain the mismatch'), t("Inspect the observed results below, then reveal a question to guide your fix.")],
+    edit: [t('3. Make your own repair'), t("Edit the condition in Your code below. Keep the intent and all three expected values unchanged.")],
+    rerun: [t('4. Verify your repair'), t("Run the same three cases again. Editing code alone does not prove the bug is fixed.")],
+    done: [t("Repair verified on the same 3 tests"), t('{0} failing case(s) now pass; all 3 supplied cases pass. Broader behavior remains unverified.',completed?.fixed||0)],
   };
   const parts = [node('h3', '', copy[stage][0]), node('p', '', copy[stage][1])];
   if (repairJourney.before) {
     const failed = repairJourney.before.evidence.results.findIndex(row => row.status !== 'passed');
     if (failed >= 0) {
       const result = repairJourney.before.evidence.results[failed], item = repairJourney.before.submission.cases[failed];
-      parts.push(node('p', 'repair-proof', t("BEFORE · Order ${0} · Expected fee ${1} · {2}", item.args[0], item.expected, result.status === 'error' ? result.error : `Actual fee $${result.actual}`)));
+      parts.push(node('p', 'repair-proof', t("BEFORE · Order ${0} · Expected fee ${1} · {2}", item.args[0], item.expected, result.status === 'error' ? result.error : t('Actual fee ${0}',result.actual))));
       if (stage === 'done') parts.push(node('p', 'repair-proof repaired', t("AFTER · Order ${0} · Expected fee ${1} · Actual fee ${2}", item.args[0], item.expected, evidence.results[failed].actual)));
     }
   }
-  if (repairJourney.aiHint) {
+  if (repairJourney.aiHint && matchesHintLanguage(repairJourney.aiHint)) {
     const hint = repairJourney.aiHint;
-    parts.push(node('p', 'agent-warning', hint.hint), node('p', '', t("{0} · AI suggestion for failing run {1} · Not verified · {2}", hint.model, hint.runId.slice(0, 8), hint.cached ? 'Reused saved hint · No new model call' : `${hint.usage?.total_tokens ?? 'Unknown'} total tokens`)));
+    parts.push(node('p', 'agent-warning', hint.hint), node('p', '', t("{0} · AI suggestion for failing run {1} · Not verified · {2}", hint.model, hint.runId.slice(0, 8), hint.cached ? t('Reused saved hint · No new model call') : t('{0} total tokens',hint.usage?.total_tokens??t('Unknown')))));
   } else if (repairJourney.hintShown) parts.push(node('p', 'agent-warning', t("Practice mentor · Prewritten, no AI call: At exactly $500, is “greater than 500” true? Which comparison includes the boundary promised by “500 or more”?")));
   const action = node('button', 'primary-button'); action.disabled = busy || planBusy || confirmingPlan || hintBusy;
   if (stage === 'run' || stage === 'rerun') {
@@ -556,7 +572,7 @@ function syncAgent() {
   $('#new-task').disabled = busy || planBusy || confirmingPlan;
   syncFollowUp();
   const observedReview = activeReview() && !stale() && evidence?.agentProvenance?.reviewId === activeReview().reviewId;
-  $('#agent-badge').textContent = planBusy ? t("GENERATING · NOT EXECUTED") : observedReview ? t("EXECUTED · EVIDENCE COLLECTED") : activeReview() ? t("REVIEWED · READY TO TEST") : planStale() ? t("INPUT CHANGED · REGENERATE") : agentPlan ? agentPlan.status.replaceAll('_', ' ').toUpperCase() : t("NOT GENERATED");
+  $('#agent-badge').textContent = planBusy ? t("GENERATING · NOT EXECUTED") : observedReview ? t("EXECUTED · EVIDENCE COLLECTED") : activeReview() ? t("REVIEWED · READY TO TEST") : planStale() ? t("INPUT CHANGED · REGENERATE") : agentPlan ? t(agentPlan.status.replaceAll('_', ' ').toUpperCase()) : t("NOT GENERATED");
   const button = $('#confirm-plan');
   if (button) button.disabled = busy || planBusy || confirmingPlan || Boolean(planStale()) || agentPlan?.status !== 'awaiting_review';
   const notice = $('#plan-stale-notice');
@@ -587,7 +603,7 @@ async function generateFollowUp(){
   const source=structuredClone(currentRecord()),snapshot=currentSnapshot();
   planBusy=true;syncAgent();syncExecution();
   try{
-    const result=await api('/api/agent/challenge',{runId:source.evidence.id});
+    const result=await api('/api/agent/challenge',{runId:source.evidence.id,language:hintLanguage});
     agentPlan=result;planSnapshot=snapshot;reviewedPlan=null;baseline=source;renderAgentPlan();renderComparison();
     $('#agent-heading').scrollIntoView({block:'start'});
     toast(result.cached?t("Saved challenge reused. No new model call."):result.status==='no_new_candidates'?t("No new distinct cases were proposed. This is not proof of correctness."):t("Challenge proposals ready. Review each expected value before execution."));
@@ -599,8 +615,8 @@ function renderAgentPlan() {
   const target = $('#agent-plan');
   if (!agentPlan) { target.replaceChildren(node('p', '', t("Add your intent and code below, then generate a plan. Existing test cases are optional."))); syncAgent(); return; }
   const summary = node('div', 'agent-summary');
-  summary.append(node('h3', '', agentPlan.summary), node('p', '', t("{0} · {1} · {2} · {3} total tokens", agentPlan.provider, agentPlan.model || 'No model call', new Date(agentPlan.createdAt).toLocaleTimeString('en-US'), agentPlan.usage.total_tokens ?? 'Unknown')));
-  if(agentPlan.challenge){summary.append(node('p','',t("FOLLOW-UP CHALLENGE · Source {0} · {1}/{2} original tests passed. {3} repeated input(s) omitted.{4}", agentPlan.challenge.sourceRunId, agentPlan.challenge.sourcePassed, agentPlan.challenge.sourceTotal, agentPlan.challenge.omittedRepeatedInputs, agentPlan.cached?' Saved plan reused; no new model call. Token count above is original usage.':'')));}
+  summary.append(node('h3', '', agentPlan.summary), node('p', '', t("{0} · {1} · {2} · {3} total tokens", t(agentPlan.provider), agentPlan.model || t('No model call'), formatTime(agentPlan.createdAt), agentPlan.usage.total_tokens ?? 'Unknown')));
+  if(agentPlan.challenge){summary.append(node('p','',t("FOLLOW-UP CHALLENGE · Source {0} · {1}/{2} original tests passed. {3} repeated input(s) omitted.{4}", agentPlan.challenge.sourceRunId, agentPlan.challenge.sourcePassed, agentPlan.challenge.sourceTotal, agentPlan.challenge.omittedRepeatedInputs, agentPlan.cached?t(' Saved plan reused; no new model call. Token count above is original usage.'):'')));}
   const staleNotice = node('p', 'agent-warning', t("Input changed after this plan was generated. Regenerate before confirming.")); staleNotice.id = 'plan-stale-notice';
   const sections = [summary, staleNotice];
   function listSection(title, items, className = '') {
@@ -665,7 +681,7 @@ async function generateAgentPlan() {
   const snapshot = JSON.stringify(submission);
   planBusy = true; syncAgent();
   try {
-    const result = await api('/api/agent/plan', submission);
+    const result = await api('/api/agent/plan', {...submission,language:hintLanguage});
     agentPlan = result; planSnapshot = snapshot; reviewedPlan = null; renderAgentPlan();
     toast(result.status === 'needs_clarification' ? t("Your intent needs clarification. Update it before confirming tests.") : t("Plan generated. Review every expected value before confirming."));
   } catch (error) { toast(error.message, true); }
@@ -720,7 +736,7 @@ function renderCaseCards() {
     }
     const actions = node('div', 'test-card-actions'), edit = node('button', 'text-button', t("Edit case")), remove = node('button', 'text-button', t("Remove"));
     edit.addEventListener('click', () => openCaseEditor(i));
-    remove.addEventListener('click', () => { cases.splice(i, 1); $('#cases').value = JSON.stringify(cases, null, 2); editorChanged(); });
+    remove.addEventListener('click', async () => { if(!await confirmAction(t('Remove test case {0}? This changes the draft; saved runs are kept.',i+1)))return;cases.splice(i, 1); $('#cases').value = JSON.stringify(cases, null, 2); editorChanged(); });
     edit.disabled = remove.disabled = busy; actions.append(edit, remove);
     if (result) {
       const trace = node('button', 'text-button', t("Explore execution ↗"));
@@ -749,11 +765,15 @@ function openCaseEditor(index) {
     editingCase = index; $('#case-dialog-heading').textContent = index === null ? t("Add a test case") : t("Edit test {0}", index + 1);
     $('#argument-fields').replaceChildren(); item.args.forEach(value => addArgument(JSON.stringify(value)));
     $('#expected-input').value = JSON.stringify(item.expected ?? null); $('#case-edit-error').textContent = '';
+    $('#case-dialog').dataset.kwargs=JSON.stringify(item.kwargs||{});
+    document.dispatchEvent(new CustomEvent('case-editor-open',{detail:{...item,functionName:$('#function-name').value.trim(),code:$('#code').value}}));
     $('#case-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
 
 function loadExample(index, announce = true) {
+  verificationTasks?.reset();
+  $('#code-language').value='python';$('#code').dataset.codeLanguage='python';queueMicrotask(()=>syncCodeLanguage());
   $('#lesson-import-note').hidden=true;
   replaySuite=null;
   selectedPracticeId=null;
@@ -771,6 +791,7 @@ function loadExample(index, announce = true) {
 }
 
 function activePack() {
+  if($('#code-language').value!=='python')return null;
   const pack = selectedExample === $('#function-name').value.trim() ? challengePacks[selectedExample] : null;
   return pack && $('#intent').value.trim() === pack.contract ? pack : null;
 }
@@ -856,7 +877,7 @@ function renderComparison() {
     target.replaceChildren(node('p', '', t("Pin a completed run as your baseline. After finding a failing edge case, pin that run, edit the code, and verify again.")));
     return;
   }
-  const caption = node('p', 'comparison-caption', t("Baseline: {0} · {1}/{2} passed · {3}", new Date(baseline.evidence.createdAt).toLocaleTimeString('en-US'), baseline.evidence.passed, baseline.evidence.total, baseline.submission.functionName));
+  const caption = node('p', 'comparison-caption', t("Baseline: {0} · {1}/{2} passed · {3}", formatTime(baseline.evidence.createdAt), baseline.evidence.passed, baseline.evidence.total, baseline.submission.functionName));
   if (!evidence || baseline.evidence.id === evidence.id) {
     target.replaceChildren(caption, node('p', '', t("Baseline pinned for this session. Edit the code or add cases, then run verification.")));
     return;
@@ -876,11 +897,21 @@ function renderComparison() {
   thead.append(header); table.append(thead);
   const tbody = node('tbody');
   const status = row => !row ? t("Not run") : row.status === 'passed' ? t("Passed") : row.status === 'error' ? t("Error") : t("Mismatch");
-  const labels = { fixed: t("Fixed"), regressed: t("Regressed"), added: t("New case"), removed: t("Removed"), passing: t("Still passing"), unresolved: 'Unresolved' };
+  const labels = { fixed: t("Fixed"), regressed: t("Regressed"), added: t("New case"), removed: t("Removed"), passing: t("Still passing"), unresolved: t('Still failing') };
+  const observed = result => {
+    const cell = node('td');
+    cell.append(node('strong', 'comparison-status', status(result)));
+    if (result) {
+      cell.append(node('small', 'comparison-value-label', t(result.status === 'error' ? 'OBSERVED ERROR' : 'ACTUAL RETURN VALUE')));
+      cell.append(node('pre', 'comparison-value', result.status === 'error' ? result.error || t('Error') : outputLabel(result.actual)));
+    }
+    return cell;
+  };
   for (const row of compared.rows) {
     const tr = node('tr');
-    const input = node('td'), code = node('code', '', JSON.stringify({ args: row.item.args, kwargs: row.item.kwargs || {} })); input.append(code, node('p', 'comparison-caption', t("Expected: {0}", JSON.stringify(row.item.expected))));
-    tr.append(input, node('td', '', status(row.previous)), node('td', '', status(row.result)), node('td', row.transition, labels[row.transition])); tbody.append(tr);
+    const input = node('td');
+    input.append(node('small', 'comparison-value-label', t('INPUT · FUNCTION CALL')), node('pre', 'comparison-call', callLabel(latestSubmission(), row.item)), node('small', 'comparison-value-label', t('EXPECTED RETURN VALUE')), node('pre', 'comparison-value', outputLabel(row.item.expected)));
+    tr.append(input, observed(row.previous), observed(row.result), node('td', row.transition, labels[row.transition])); tbody.append(tr);
   }
   table.append(tbody);
   const scroll = node('div', 'comparison-scroll'); scroll.append(table);
@@ -911,7 +942,7 @@ function syncHint() {
 
 async function api(url, data) {
   let response;
-  try { response = await fetch(url, data === undefined ? { signal: AbortSignal.timeout(16000) } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(data.execution==='modal'?160000:url==='/api/lessons/generate'?100000:url==='/api/lessons/taiwan-narration'?65000:url==='/api/lessons/narration'?130000:url==='/api/lessons/example'?60000:url.startsWith('/api/interviews/')?(data.execution==='docker'?60000:35000):url==='/api/shrink' || url==='/api/mutations/check'?120000:url === '/api/agent/plan' || url === '/api/agent/challenge' || url==='/api/requirements/plan' ? 55000 : url === '/api/hint' || url === '/api/mentor/feedback' ? 35000 : 25000) }); }
+  try { response = await fetch(url, data === undefined ? { signal: AbortSignal.timeout(16000) } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(data.codeLanguage&&data.codeLanguage!=='python'?85000:data.execution==='modal'?160000:url==='/api/lessons/generate'?100000:url==='/api/lessons/taiwan-narration'?65000:url==='/api/lessons/narration'?130000:url==='/api/lessons/example'?60000:url.startsWith('/api/interviews/')?(data.execution==='docker'?60000:35000):url==='/api/shrink' || url==='/api/mutations/check'?120000:url === '/api/agent/plan' || url === '/api/agent/challenge' || url==='/api/requirements/plan' ? 55000 : url === '/api/hint' || url === '/api/mentor/feedback' ? 35000 : 25000) }); }
   catch { throw new Error(t("Connection lost or timed out. Check that the local server is running, then check the environment again.")); }
   let result;
   try { result = await response.json(); } catch { throw new Error(t("Unable to read the server response. Refresh the page.")); }
@@ -968,7 +999,7 @@ function displayResults() {
   });
   $('#results').replaceChildren(...rows);
   $('#evidence-actions').hidden = false;
-  $('#run-meta').textContent = `${new Date(evidence.createdAt).toLocaleTimeString('en-US')} · ${(evidence.durationMs / 1000).toFixed(2)}s · ${evidence.execution==='modal-python'?t("Modal cloud CPU"):evidence.execution==='docker-python'?t("Local Docker"):t("Execution environment not recorded")}${evidence.cloud?.sandboxId?` · ${evidence.cloud.sandboxId}`:''}`;
+  $('#run-meta').textContent = `${formatTime(evidence.createdAt)} · ${(evidence.durationMs / 1000).toFixed(2)}s · ${evidence.execution==='modal-python'?t("Modal cloud CPU"):evidence.execution==='docker-python'?t("Local Docker"):t("Execution environment not recorded")}${evidence.cloud?.sandboxId?` · ${evidence.cloud.sandboxId}`:''}`;
   $('#step-two').classList.add('selected');
   traceOptions();
   editorChanged();
@@ -980,8 +1011,8 @@ async function runVerification(options = {}) {
   try {
     submission = current();
     if(replaySuite && !matchesRegression(submission,replaySuite))throw new Error(t("The guarded contract or test suite changed. Restore the saved values, or release Regression Guard to run editable tests."));
-    if (!submission.code.trim()) throw new Error(t("Enter your Python code first."));
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(submission.functionName)) throw new Error(t("Enter a valid Python function name."));
+    if (!submission.code.trim()) throw new Error(t("Enter your code first."));
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(submission.functionName)) throw new Error(t("Enter a valid function name."));
     if (!Array.isArray(submission.cases) || submission.cases.length < 1 || submission.cases.length > 20) throw new Error(t("Provide between 1 and 20 JSON test cases."));
     for (const item of submission.cases) if (!item || !Array.isArray(item.args) || !Object.hasOwn(item, 'expected')) throw new Error(t("Each case must include an args array and an expected value."));
   } catch (error) { toast(error instanceof SyntaxError ? t("Test cases must be valid JSON. Check brackets, commas, and double quotes.") : error.message, true); return; }
@@ -1022,7 +1053,7 @@ $('#generate-requirements').addEventListener('click',generateRequirements);
 $('#requirements-nav').addEventListener('click',()=>$('#requirements-heading').scrollIntoView({behavior:'smooth'}));
 $('#mutation-nav').addEventListener('click',()=>$('#mutation-heading').scrollIntoView({behavior:'smooth'}));
 $('#check-mutations').addEventListener('click',checkMyTests);
-for(const [value,contract] of Object.entries(shrinkContracts)){const option=node('option','',contract.label);option.value=value;$('#shrink-contract').append(option);}
+for(const [value,contract] of Object.entries(shrinkContracts)){const option=node('option','',t(contract.label));option.value=value;$('#shrink-contract').append(option);}
 $('#shrink-case').addEventListener('change',()=>{ $('#confirm-shrink-contract').checked=false;renderShrink(); });
 $('#shrink-contract').addEventListener('change',()=>{ $('#confirm-shrink-contract').checked=false;renderShrink(); });
 $('#confirm-shrink-contract').addEventListener('change',renderShrink);
@@ -1054,6 +1085,7 @@ $('#generate-plan').addEventListener('click', generateAgentPlan);
 $('#agent-nav').addEventListener('click', () => $('#agent-heading').scrollIntoView({ behavior: 'smooth' }));
 $('#new-task').addEventListener('click', () => {
   if (busy || planBusy || confirmingPlan || mentorBusy) return;
+  verificationTasks?.reset();
   $('#lesson-import-note').hidden=true;
   repairJourney = null;
   replaySuite=null;
@@ -1123,8 +1155,10 @@ $('#save-case').addEventListener('click', () => {
       try { return JSON.parse(el.value); } catch { throw new Error(`Argument ${i + 1}: use a number, list, quoted text, boolean, or null.`); }
     });
     let expected; try { expected = JSON.parse($('#expected-input').value); } catch { throw new Error(t("Enter a valid expected value. Text must be in double quotes.")); }
-    if (editingCase === null) { if (cases.length >= 20) throw new Error(t("The limit is 20 cases.")); cases.push({ args, expected }); }
-    else cases[editingCase] = { ...cases[editingCase], args, expected };
+    const updated={args,expected},kwargs=JSON.parse($('#case-dialog').dataset.kwargs||'{}');
+    if(Object.keys(kwargs).length||cases[editingCase]?.kwargs)updated.kwargs=kwargs;
+    if (editingCase === null) { if (cases.length >= 20) throw new Error(t("The limit is 20 cases.")); cases.push(updated); }
+    else cases[editingCase] = { ...cases[editingCase], ...updated };
     $('#cases').value = JSON.stringify(cases, null, 2); $('#case-dialog').close(); editorChanged();
   } catch (error) { $('#case-edit-error').textContent = error.message; }
 });
@@ -1172,7 +1206,7 @@ for (const selector of ['#code', '#cases']) {
   });
 }
 document.addEventListener('keydown', event => {
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && document.body.dataset.mode==='verify' && !document.querySelector('.studio-mode-verify')?.hidden && !document.querySelector('dialog[open]')) { event.preventDefault(); runVerification(); }
+  if (!event.defaultPrevented && !event.target.closest?.('#learning-practice') && (event.ctrlKey || event.metaKey) && event.key === 'Enter' && document.body.dataset.mode==='verify' && !document.querySelector('.studio-mode-verify')?.hidden && !document.querySelector('dialog[open]')) { event.preventDefault(); runVerification(); }
 });
 $('#format-tests').addEventListener('click', () => {
   try { $('#cases').value = JSON.stringify(JSON.parse($('#cases').value), null, 2); editorChanged(); toast(t("Test cases formatted.")); }
@@ -1199,7 +1233,7 @@ async function requestHint(requestedLevel = level) {
   const requestedRecord = currentRecord();
   hintBusy = true; syncHint(); renderRepairJourney();
   try {
-    const result = hints[requestedLevel] ? { ...hintDetails[requestedLevel], hint: hints[requestedLevel], model: hintDetails[requestedLevel]?.model || health?.ai.model, cached: true } : await api('/api/hint', { runId: requestedId, level: requestedLevel });
+    const result = hints[requestedLevel] ? { ...hintDetails[requestedLevel], hint: hints[requestedLevel], model: hintDetails[requestedLevel]?.model || health?.ai.model, cached: true } : await api('/api/hint', { runId: requestedId, level: requestedLevel,language:hintLanguage });
     if (evidence?.id === requestedId) {
       hints[requestedLevel] = result.hint;
       hintDetails[requestedLevel] = result;
@@ -1214,14 +1248,14 @@ async function requestHint(requestedLevel = level) {
 $('#hint-button').addEventListener('click', () => requestHint());
 $('#export-readable').addEventListener('click',()=>{
   if(!evidence)return;
-  const html=readableReport({submission:latestSubmission(),evidence,baseline,hints,hintDetails,mentor:learning,editorChanged:Boolean(stale())});
+  const html=readableReport({language:locale,submission:latestSubmission(),evidence,baseline,hints,hintDetails,mentor:learning,editorChanged:Boolean(stale())});
   const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
   const link=node('a');link.href=url;link.download=`invarith-${evidence.id}-report.html`;link.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
   toast(t("Readable report downloaded. It contains the completed run, not unexecuted draft edits."));
 });
 $('#export-button').addEventListener('click', () => {
   if (!evidence) return;
-    const report = { project: 'Invarith', submission: JSON.parse(runSnapshot), evidence, hints, mentor: learning, agentProvenance: evidence.agentProvenance || null, agentFindings: evidence.agentFindings || null, challengeProvenance: runProvenance, baseline, comparison: baseline ? compareRuns(baseline, currentRecord()) : null, note: t("Results apply only to the supplied cases. Model-proposed expected values require user confirmation. Curated challenges are human-authored. Changed expectations are not fixes. AI suggestions have not been verified. Predictions are learning responses, never test expectations or proof of independent skill.") };
+    const report = { language:locale,display:reportPresentation({submission:latestSubmission(),evidence},locale),project: 'Invarith', submission: JSON.parse(runSnapshot), evidence, hints, mentor: learning, agentProvenance: evidence.agentProvenance || null, agentFindings: evidence.agentFindings || null, challengeProvenance: runProvenance, baseline, comparison: baseline ? compareRuns(baseline, currentRecord()) : null, note: t("Results apply only to the supplied cases. Model-proposed expected values require user confirmation. Curated challenges are human-authored. Changed expectations are not fixes. AI suggestions have not been verified. Predictions are learning responses, never test expectations or proof of independent skill.") };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
   const a = node('a'); a.href = url; a.download = `invarith-${evidence.createdAt.replaceAll(':', '-')}.json`; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000); toast(t("Submission and test evidence exported."));
@@ -1229,7 +1263,10 @@ $('#export-button').addEventListener('click', () => {
 
 loadExample(0, false);
 try {
-  const draft = JSON.parse(localStorage.getItem('invarith-draft-v1'));
+  let draft = JSON.parse(localStorage.getItem('invarith-draft-v1'));
+  const activeTask=localStorage.getItem('invarith-active-verification-task');
+  const taskDraft=JSON.parse(localStorage.getItem('invarith-verification-tasks-v1')||'[]').find(row=>row.id===activeTask)?.draft;
+  if(taskDraft)draft={...draft,...taskDraft};
   if (draft && ['code', 'functionName', 'cases'].every(key => typeof draft[key] === 'string')) {
     if (draft.learnerDraft && Number.isInteger(draft.learnerDraft.caseIndex) && typeof draft.learnerDraft.predictionText==='string' && typeof draft.learnerDraft.answer==='string') learnerDraft=draft.learnerDraft;
     hasDraft = true;
@@ -1243,6 +1280,7 @@ try {
       challengeProvenance = { source: 'human-authored-example-pack', contract: pack.contract, confirmedByUser: true, cases: pack.cases.map(({ args, expected }) => ({ args, expected })) };
     }
     $('#confirm-contract').checked = Boolean(confirmedContract);
+    $('#code-language').value=draft.codeLanguage||'python';
     $('#intent').value = typeof draft.intent === 'string' ? draft.intent : challengePacks[selectedExample]?.contract || '';
     $('#code').value = legacyIndex >= 0 ? examples.find(item => item.functionName === legacyName).code : draft.code; $('#function-name').value = draft.functionName; $('#cases').value = draft.cases; editorChanged();
   }
@@ -1253,3 +1291,21 @@ initWorkspaceLayout();
 checkHealth();
 renderTransferPractices();
 refreshHistory(true);
+
+// Keep language drafts separate from shared intent and cases.
+let editorLanguage=$('#code-language').value;
+const syncCodeLanguage=()=>{document.querySelector('.studio-app')?.classList.toggle('non-python-editor',$('#code-language').value!=='python');const lang=codeLanguages.find(row=>row.id===$('#code-language').value)||codeLanguages[0];const filename=document.querySelector('.editor-tab .editor-filename');if(filename)filename.textContent=lang.file;const note=$('#code-language-note');if(note){note.hidden=lang.id==='python';note.textContent=t(languageInstructions(lang.id));}const icon=document.querySelector('.editor-tab .file-icon');if(icon)icon.textContent=({python:'Py',javascript:'JS',typescript:'TS',java:'Java',cpp:'C++',csharp:'C#'})[lang.id]||lang.label.split(' ')[0];};
+$('#code-language').addEventListener('change',()=>{const next=$('#code-language').value;try{localStorage.setItem('invarith-verify-language:'+($('#code').dataset.codeLanguage||editorLanguage),JSON.stringify({functionName:$('#function-name').value,code:$('#code').value}));let saved=JSON.parse(localStorage.getItem('invarith-verify-language:'+next)||'null');$('#code').value=saved?.functionName===$('#function-name').value?saved.code:languageStarter(next,$('#function-name').value,JSON.parse($('#cases').value));}catch{$('#code').value=languageStarter(next,$('#function-name').value);}editorLanguage=next;$('#code').dataset.codeLanguage=next;if(next!=='python')$('#execution-backend').value='docker';syncCodeLanguage();editorChanged();});
+syncCodeLanguage();
+verificationTasks=initVerificationTasks({api,hasDraft,isBusy:()=>busy||planBusy||confirmingPlan||hintBusy||historyBusy||mentorBusy||Boolean(interviewUI?.active?.()),
+ capture:()=>({draft:{codeLanguage:$('#code-language').value,code:$('#code').value,functionName:$('#function-name').value,intent:$('#intent').value,cases:$('#cases').value},activeRunId:evidence?.id||null,baselineRunId:baseline?.evidence.id||null}),
+ restore:async row=>{
+  $('#new-task').click();
+  const draft=row.draft;
+  $('#code-language').value=draft.codeLanguage;$('#code').dataset.codeLanguage=draft.codeLanguage;
+  $('#code').value=draft.code;$('#function-name').value=draft.functionName;$('#intent').value=draft.intent;$('#cases').value=draft.cases;
+  selectedExample=null;confirmedContract=null;challengeProvenance=null;hasDraft=true;
+  if(row.activeRunId)await openSavedRun(row.activeRunId,true,row.baselineRunId);
+  $('#code-language').value=draft.codeLanguage;$('#code').dataset.codeLanguage=draft.codeLanguage;editorLanguage=draft.codeLanguage;syncCodeLanguage();editorChanged();await saveWorkspace();
+ }
+});

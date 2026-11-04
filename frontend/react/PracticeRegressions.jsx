@@ -1,3 +1,6 @@
+import {formatRatio} from '../display-format.mjs';
+import {labelSeparator} from '../i18n.mjs';
+import {formatDateTime} from '../date-format.mjs';
 import React,{useEffect,useRef,useState} from 'react';
 import {locale,t} from '../i18n.mjs';
 import {canonical} from '../evidence-tools.mjs';
@@ -18,8 +21,8 @@ export function PracticeRegressions({session,code,result,busy,onBusy,onSession})
     {error&&<p role="alert">{error} <button className="text-button" disabled={busy} onClick={()=>void reload()}>{t('Reload saved cases')}</button></p>}{notice&&<p role="status">{notice}</p>}
     {failure&&!Number.isFinite(Date.parse(result.createdAt))&&<p>{t('Run tests again to save this observed failure.')}</p>}
     {group.cases.length>0&&<><div className="practice-regression-toolbar"><span>{t('{0} saved cases · {1} ready to run',group.cases.length,compatible.length)}</span><button className="secondary-button" disabled={busy||!compatible.length||!code.trim()} onClick={()=>void act('run')}>{t(phase==='run'?'Checking saved cases…':'Run {0} saved cases · No AI',compatible.length)}</button></div>
-      {checked&&<p className="practice-regression-summary" role="status">{t('Saved-case result: {0}/{1}',checked.passed,checked.total)} · {new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(checked.createdAt))}</p>}
-      <ol className="practice-regression-list">{group.cases.map((item,index)=>{const outcome=checked?.results.find(row=>row.caseId===item.id);return <li key={item.id}><header><strong>{t('Saved case {0}',index+1)}</strong><button className="text-button" disabled={busy} onClick={()=>void act('remove',item.id)}>{t('Remove saved case')}</button></header><pre>{session.functionName}({item.args.map(value=>JSON.stringify(value)).join(', ')})</pre><p>{t('Expected')}: <code>{output(item.expected)}</code></p>{!item.compatible&&<p className="practice-regression-stale">{t('Test expectations changed. Run the full tests and save a current failure again.')}</p>}{outcome&&<p>{t(outcome.status==='passed'?'Passed':outcome.status==='error'?'Execution error':'Mismatch')} · {t('Actual')}: <code>{outcome.status==='error'?outcome.error:output(outcome.actual)}</code></p>}</li>;})}</ol>
+      {checked&&<p className="practice-regression-summary" role="status">{t('Saved-case result: {0} / {1}',checked.passed,checked.total)} · {formatDateTime(checked.createdAt)}</p>}
+      <ol className="practice-regression-list">{group.cases.map((item,index)=>{const outcome=checked?.results.find(row=>row.caseId===item.id);return <li key={item.id}><header><strong>{t('Saved case {0}',index+1)}</strong><button className="text-button" disabled={busy} onClick={()=>void act('remove',item.id)}>{t('Remove saved case')}</button></header><pre>{session.functionName}({item.args.map(value=>JSON.stringify(value)).join(', ')})</pre><p>{t('Expected')}{labelSeparator}<code>{output(item.expected)}</code></p>{!item.compatible&&<p className="practice-regression-stale">{t('Test expectations changed. Run the full tests and save a current failure again.')}</p>}{outcome&&<p>{t(outcome.status==='passed'?'Passed':outcome.status==='error'?'Execution error':'Mismatch')} · {t('Actual')}{labelSeparator}<code>{outcome.status==='error'?outcome.error:output(outcome.actual)}</code></p>}</li>;})}</ol>
     </>}
     <small>{t('Saved inputs and expected values are kept together. Only compatible cases are checked. These checks do not change hidden-test results or count as solved questions.')}</small>
   </section>;

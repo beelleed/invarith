@@ -1,4 +1,5 @@
 import { messages } from './locales/zh-TW.mjs';
+import {productCopy,cleanProductLabel} from './product-labels.mjs';
 
 // A locale owns its page URL, voice defaults and independent preferences.
 export const locales = {
@@ -8,10 +9,12 @@ export const locales = {
 export function resolveLocale(path = '') { return path.startsWith('/zh-TW') ? 'zh-TW' : 'en'; }
 export const locale = typeof document === 'undefined' ? 'en' : resolveLocale(globalThis.location?.pathname);
 export const language = locales[locale];
+export const labelSeparator=locale==='zh-TW'?'：':': ';
 export function translate(source, values = [], target = locale) {
   if (typeof source !== 'string') return source == null ? '' : String(source);
-  const pattern = target === 'zh-TW' ? messages[source] ?? source : source;
-  return pattern.replace(/\{(\d+)\}/g, (_, index) => String(values[index] ?? `{${index}}`));
+  const key=productCopy[source]||source;
+  const pattern = target === 'zh-TW' ? messages[key] ?? key : key;
+  return cleanProductLabel(pattern.replace(/\{(\d+)\}/g, (_, index) => String(values[index] ?? `{${index}}`)));
 }
 export const t = (source, ...values) => translate(source, values);
 export const preferenceKey = name => `${name}:${locale}`;

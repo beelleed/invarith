@@ -11,7 +11,7 @@ export function localizedHTML(source, locale) {
       const key = node.value.trim(), result = translate(key, [], locale);
       if (result !== key) edits.push({ start: node.sourceCodeLocation.startOffset, end: node.sourceCodeLocation.endOffset, value: escape(node.value.replace(key,result)) });
     }
-    if (!skip) for (const attr of node.attrs || []) {
+    if (!skip || node.tagName==='textarea' && !protectedText && !node.attrs?.some(a=>a.name==='data-no-translate')) for (const attr of node.attrs || []) {
       if (!['aria-label','title','placeholder','alt'].includes(attr.name)) continue;
       const result = translate(attr.value, [], locale), location = node.sourceCodeLocation?.attrs?.[attr.name];
       if (location && result !== attr.value) edits.push({ start:location.startOffset,end:location.endOffset,value:`${attr.name}="${escape(result)}"` });

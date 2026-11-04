@@ -3,6 +3,12 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AppError} from './verification.mjs';
 
+export function planListRestore(current,incoming){
+  const lists=structuredClone(current.lists),accepted=[];
+  for(const list of incoming){if(lists.length>=20||lists.some(row=>row.id===list.id||row.name.toLocaleLowerCase()===list.name.toLocaleLowerCase()))continue;lists.push(structuredClone(list));accepted.push(list.id);}
+  return {lists,accepted,added:accepted.length,skipped:incoming.length-accepted.length};
+}
+
 export function createPracticeLists({directory='./data/practice-lists',practice,now=()=>Date.now()}={}){
   let busy=false;const path=join(directory,'index.json');
   const read=async()=>{try{return JSON.parse(await readFile(path,'utf8'));}catch(e){if(e.code==='ENOENT')return {revision:0,lists:[]};throw e;}};
@@ -11,6 +17,10 @@ export function createPracticeLists({directory='./data/practice-lists',practice,
   const find=(data,id)=>{const list=data.lists.find(l=>l.id===id);if(!list)throw new AppError(404,'Practice list not found.');return list;};
   return {
     list:read,
+    async restoreMissing(incoming){
+      if(busy)throw new AppError(429,'A practice list is being saved. Please retry.');busy=true;
+      try{const data=await read(),plan=planListRestore(data,incoming);if(plan.added){data.lists=plan.lists;data.revision++;await mkdir(directory,{recursive:true});const temp=join(directory,randomUUID()+'.tmp');await writeFile(temp,JSON.stringify(data),{mode:0o600});await rename(temp,path);}return {added:plan.added,skipped:plan.skipped};}finally{busy=false;}
+    },
     async detail(id){const data=await read(),list=find(data,id),items=[];
       for(const entry of list.items){try{const task=await practice.open(entry.practiceId),result=task.attempts?.at(-1)||(task.lastResult?.scope==='hidden_cases'?task.lastResult:null);const valid=result&&Number.isInteger(result.total)&&result.total>0&&Number.isInteger(result.passed)&&result.passed>=0&&result.passed<=result.total;
         items.push({...entry,title:task.title,topic:task.topic,contractId:task.taskId||null,available:true,lastTest:valid?{passed:result.passed,total:result.total,createdAt:result.createdAt||null}:null});

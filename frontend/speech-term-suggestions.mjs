@@ -1,0 +1,6 @@
+const alternatives=[{pattern:/(^|[^A-Za-z])b\s*x(?=$|[^A-Za-z])/ig,replacement:'BFS',prefix:true},{pattern:/\bshowot\b/ig,replacement:'shortest path'},{pattern:/空收入/g,replacement:'空輸入'},{pattern:/(^|[^A-Za-z])b\s*s\s*s(?=$|[^A-Za-z])/ig,replacement:'BFS',prefix:true},{pattern:/(^|[^A-Za-z])d\s*s\s*s(?=$|[^A-Za-z])/ig,replacement:'DFS',prefix:true},{pattern:/修理\s*(?:pass|path)/ig,replacement:'shortest path'},{pattern:/shortest\s+pass\b/ig,replacement:'shortest path'}];
+export function speechTermSuggestions(text){
+ const protectedRanges=[...text.matchAll(/```[\s\S]*?```|`[^`\n]*`/g)].map(m=>[m.index,m.index+m[0].length]);
+ const result=[];for(const rule of alternatives)for(const match of text.matchAll(rule.pattern)){const start=match.index+(rule.prefix?match[1].length:0),heard=match[0].slice(rule.prefix?match[1].length:0);if(protectedRanges.some(([a,b])=>start>=a&&start<b))continue;result.push({start,heard,replacement:rule.replacement});}return result.sort((a,b)=>a.start-b.start).slice(0,6);
+}
+export function applySpeechTermSuggestion(text,suggestion){return text.slice(suggestion.start,suggestion.start+suggestion.heard.length)===suggestion.heard?text.slice(0,suggestion.start)+suggestion.replacement+text.slice(suggestion.start+suggestion.heard.length):text;}

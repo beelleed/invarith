@@ -1,3 +1,7 @@
+import {ActionArrow} from './ActionArrow.jsx';
+import {labelSeparator} from '../i18n.mjs';
+import {formatDate} from '../date-format.mjs';
+import {SavedSolutionPlans} from './SavedSolutionPlans.jsx';
 import React,{useEffect,useRef,useState} from 'react';
 import {locale,t} from '../i18n.mjs';
 import {NoteRecall} from './NoteRecall.jsx';
@@ -34,16 +38,20 @@ export function PracticeNotes({session}){
 }
 
 export function PracticeNotebook({onOpen}){
+  const [source,setSource]=useState('notes');
+  return <div className="notebook-sources"><nav className="solution-plan-sections" aria-label={t('Notebook contents')}>{[['notes','Review notes'],['plans','Saved solution plans']].map(([id,label])=><button type="button" key={id} aria-pressed={source===id} onClick={()=>setSource(id)}>{t(label)}</button>)}</nav>{source==='plans'?<SavedSolutionPlans onOpen={onOpen}/>:<ReviewNotebook onOpen={onOpen}/>}</div>;
+}
+function ReviewNotebook({onOpen}){
   const [notes,setNotes]=useState(null),[error,setError]=useState(''),[tag,setTag]=useState('all'),[search,setSearch]=useState('');
   const [recall,setRecall]=useState(null);
   useEffect(()=>{let alive=true,seq=0;const refresh=async()=>{const current=++seq;try{const data=await request('/api/practice-notes');if(alive&&seq===current){setNotes(data.notes);setError('');}}catch(e){if(alive&&seq===current)setError(t(e.message));}};void refresh();window.addEventListener('focus',refresh);document.addEventListener('practice-notes-changed',refresh);return()=>{alive=false;window.removeEventListener('focus',refresh);document.removeEventListener('practice-notes-changed',refresh);};},[]);
   const query=search.trim().toLocaleLowerCase(),rows=(notes||[]).filter(note=>(tag==='all'||note.tags.includes(tag))&&(!query||[note.title,note.observation,note.nextTime].join(' ').toLocaleLowerCase().includes(query)));
   const eligible=recallableNotes(rows);let savedRound;try{savedRound=restoreRecallRound(localStorage.getItem(recallStorageKey),notes||[]);}catch{}
   if(recall)return <NoteRecall initialRound={recall} notes={notes||[]} onClose={()=>setRecall(null)} onOpen={onOpen}/>;
-  return <section className="practice-notebook" aria-label={t('My learning notebook')}><header><div><h3>{t('My learning notebook')}</h3><p>{t('Your notes, grouped by what you want to practice again.')}</p></div><span>{t('{0} saved notes',notes?.length||0)}</span></header><div className="practice-notebook-tools"><label>{t('Filter by review tag')}<select value={tag} onChange={e=>setTag(e.target.value)}><option value="all">{t('All notes')}</option>{tags.map(([id,label])=><option key={id} value={id}>{t(label)} ({(notes||[]).filter(n=>n.tags.includes(id)).length})</option>)}</select></label><label>{t('Search my notes')}<input maxLength={200} type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label></div>
-    <div className="practice-notebook-recall"><button className="secondary-button" disabled={!eligible.length} onClick={()=>setRecall(createRecallRound(eligible))}>{t('Practice recalling these notes')} ({eligible.length})</button>{savedRound&&<button className="text-button" onClick={()=>setRecall(savedRound)}>{t(savedRound.position===savedRound.cards.length?'View my last recall round':'Resume recall round')}</button>}<small>{t('Explain the idea first, then reveal your notes. Your self-checks stay separate from test results.')}</small></div>
+  return <section className="practice-notebook" aria-label={t('My learning notebook')}><header><div><h3>{t('My learning notebook')}</h3><p>{t('Your notes, grouped by what you want to practice again.')}</p></div><span>{t('{0} saved notes',notes?.length||0)}</span></header><div className="practice-notebook-tools"><label>{t('Filter by review tag')}<select value={tag} onChange={e=>setTag(e.target.value)}><option value="all">{t('All notes')}</option>{tags.map(([id,label])=><option key={id} value={id}>{t('{0} ({1})',t(label),(notes||[]).filter(n=>n.tags.includes(id)).length)}</option>)}</select></label><label>{t('Search my notes')}<input maxLength={200} type="search" value={search} onChange={e=>setSearch(e.target.value)}/></label></div>
+    <div className="practice-notebook-recall"><button className="secondary-button" disabled={!eligible.length} onClick={()=>setRecall(createRecallRound(eligible))}>{t('{0} ({1})',t('Practice recalling these notes'),eligible.length)}</button>{savedRound&&<button className="text-button" onClick={()=>setRecall(savedRound)}>{t(savedRound.position===savedRound.cards.length?'View my last recall round':'Resume recall round')}</button>}<small>{t('Explain the idea first, then reveal your notes. Your self-checks stay separate from test results.')}</small></div>
     {error&&<p role="alert">{error}</p>}{!notes&&!error&&<p>{t('Loading notes…')}</p>}
-    {rows.slice(0,30).map(note=><article className="practice-notebook-row" key={note.id}><header><strong>{note.title}</strong><small>{new Intl.DateTimeFormat(locale,{month:'short',day:'numeric'}).format(new Date(note.updatedAt))}</small></header>{note.observation&&<p>{note.observation}</p>}{note.nextTime&&<p><b>{t('Next time')}: </b>{note.nextTime}</p>}<footer><span>{note.tags.map(id=>t(tags.find(([tag])=>tag===id)?.[1]||id)).join(' · ')}</span><button className="text-button" onClick={()=>onOpen({id:note.topic,latest:{sessionId:note.id}})}>{t('Open question and notes')} ↗</button></footer></article>)}
+    {rows.slice(0,30).map(note=><article className="practice-notebook-row" key={note.id}><header><strong>{note.title}</strong><small>{formatDate(note.updatedAt)}</small></header>{note.observation&&<p>{note.observation}</p>}{note.nextTime&&<p><b>{t('Next time')}{labelSeparator}</b>{note.nextTime}</p>}<footer><span>{note.tags.map(id=>t(tags.find(([tag])=>tag===id)?.[1]||id)).join(' · ')}</span><button className="text-button" onClick={()=>onOpen({id:note.topic,latest:{sessionId:note.id}})}>{t('Open question and notes')} <ActionArrow external/></button></footer></article>)}
     {notes&&!rows.length&&<p>{t(notes.length?'No notes match this filter.':'Write a note below a practice question to start your notebook.')}</p>}
     {rows.length>30&&<small>{t('Showing the 30 most recently updated matches. Use a tag or search to narrow the list.')}</small>}
   </section>;

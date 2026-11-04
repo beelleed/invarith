@@ -1,0 +1,12 @@
+export const accountSignal='invarith-account-event';
+export function installAccountScope(userId,win=window,workspaceVersion=0){
+ if(!/^[a-f0-9-]{36}$/.test(userId))throw Error('Invalid account scope.');
+ const proto=win.Storage.prototype,original={get:proto.getItem,set:proto.setItem,remove:proto.removeItem,clear:proto.clear},prefix='invarith-user:'+userId+':'+(workspaceVersion?'w'+workspaceVersion+':':'');
+ const key=value=>String(value).startsWith('invarith')&&String(value)!==accountSignal?prefix+value:String(value);
+ proto.getItem=function(value){return original.get.call(this,key(value));};proto.setItem=function(value,data){return original.set.call(this,key(value),data);};proto.removeItem=function(value){return original.remove.call(this,key(value));};
+ proto.clear=function(){const keys=[];for(let i=0;i<this.length;i++){const name=this.key(i);if(name?.startsWith(prefix)&&name.slice(prefix.length).startsWith('invarith'))keys.push(name);}keys.forEach(name=>original.remove.call(this,name));};
+ win.addEventListener('storage',event=>{if(event.key===accountSignal){win.location.reload();return;}if(event.key?.startsWith('invarith-user:')){event.stopImmediatePropagation();if(event.key.startsWith(prefix)&&event.key.slice(prefix.length).startsWith('invarith'))win.dispatchEvent(new win.StorageEvent('storage',{key:event.key.slice(prefix.length),oldValue:event.oldValue,newValue:event.newValue,url:event.url,storageArea:event.storageArea}));}},true);
+ const nativeFetch=win.fetch.bind(win);let expired=false;
+ win.fetch=async(input,options={})=>{const url=new URL(typeof input==='string'||input instanceof URL?String(input):input.url,win.location.href),headers=new win.Headers(options.headers||(typeof input==='object'?input.headers:undefined));if(url.origin===win.location.origin&&url.pathname.startsWith('/api/')){headers.set('X-Invarith-User',userId);headers.set('X-Invarith-Workspace',String(workspaceVersion));}const response=await nativeFetch(input,{...options,headers});if(url.origin===win.location.origin&&url.pathname.startsWith('/api/')&&[401,409].includes(response.status)){let value;try{value=await response.clone().json();}catch{}if(!expired&&['AUTH_REQUIRED','AUTH_ACCOUNT_CHANGED','AUTH_WORKSPACE_CHANGED'].includes(value?.code)){expired=true;win.document.body.classList.add('auth-loading');win.location.reload();}}return response;};
+ return {signal(){original.set.call(win.localStorage,accountSignal,Date.now()+':'+Math.random());}};
+}

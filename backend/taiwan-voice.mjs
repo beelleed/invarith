@@ -8,11 +8,16 @@ import { narrationSegments } from '../frontend/teacher-storyboards.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 export const taiwanVoices=['zh-TW-HsiaoChenNeural','zh-TW-HsiaoYuNeural'];
-export function createTaiwanVoice(lessons,{directory=join(root,'data/taiwan-voice'),renderer,generatedLessons}={}){
+export function createTaiwanVoice(lessons,{directory=join(root,'data/taiwan-voice'),previewDirectory=directory,renderer,generatedLessons}={}){
   const render=renderer || (async request=>{const response=await command(join(root,'.venv-tts',process.platform==='win32'?'Scripts/python.exe':'bin/python'),[join(root,'backend/taiwan-voice.py')],{input:JSON.stringify(request),timeout:55000,maxOutput:8000,unavailableMessage:'Taiwan voice dependencies are not installed.',timeoutMessage:'The online voice service timed out. No completed audio was saved.'});if(response.code!==0)throw new AppError(503,'Taiwan voice service is unavailable. Use Kokoro or Browser voice.');try{return JSON.parse(response.stdout);}catch{throw new AppError(502,'Taiwan voice did not return valid audio metadata.');}});
   const cache=createLocalVoice({directory,renderer:render,namespace:'taiwan-teacher-lessons-v2',voiceChoices:taiwanVoices});
   return {
     close:()=>cache.close(),
+    async prepareDesign(body,lesson){
+      if(body.allowOnline!==true||!taiwanVoices.includes(body.voice)||lesson?.language!=='zh-TW'||!Number.isInteger(body.chapterIndex)||!lesson.chapters?.[body.chapterIndex])throw new AppError(400,'Confirm online narration and choose an existing Chinese walkthrough chapter.');
+      const result=await cache.prepare({language:'zh-TW',voice:body.voice,text:lesson.chapters[body.chapterIndex].narration});
+      return {...result,url:result.url.replace('/api/lesson-audio/','/api/taiwan-lesson-audio/')};
+    },
     async prepare(body){
       if(!taiwanVoices.includes(body.voice) || !Number.isInteger(body.chapterIndex))throw new AppError(400,'Choose a Taiwan voice and a worked-lesson chapter.');
       // No arbitrary text/code from the request can be transmitted to Microsoft.
@@ -29,6 +34,6 @@ export function createTaiwanVoice(lessons,{directory=join(root,'data/taiwan-voic
       return {...result,url:result.url.replace('/api/lesson-audio/','/api/taiwan-lesson-audio/'),scope:body.lessonId?'Generated narration sent with explicit consent.':'Public worked-lesson narration only. No learner code is sent.'};
     },
     audio:name=>cache.audio(name),
-    async preview(name){const file={'hsiaochen.mp3':'hsiaochen-preview.mp3','hsiaoyu.mp3':'hsiaoyu-preview.mp3'}[name];if(!file)throw new AppError(404,'Voice sample not found.');try{return await readFile(join(directory,file));}catch{throw new AppError(404,'This saved voice sample is not installed.');}},
+    async preview(name){const file={'hsiaochen.mp3':'hsiaochen-preview.mp3','hsiaoyu.mp3':'hsiaoyu-preview.mp3'}[name];if(!file)throw new AppError(404,'Voice sample not found.');try{return await readFile(join(previewDirectory,file));}catch{throw new AppError(404,'This saved voice sample is not installed.');}},
   };
 }

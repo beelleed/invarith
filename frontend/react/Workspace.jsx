@@ -1,3 +1,7 @@
+import {SmartCodeEditors} from './SmartCodeEditors.jsx';
+import {ResizableWorkspaces} from './ResizableWorkspaces.jsx';
+export {mountPublicPreview} from './PublicPreview.jsx';
+import {NativeTestCaseEditor} from './NativeTestCaseEditor.jsx';
 import React,{useState,useEffect,useLayoutEffect,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
@@ -7,6 +11,11 @@ import {ProjectWorkspace} from './ProjectWorkspace.jsx';
 import {AIPractice} from './AIPractice.jsx';
 import {LearningDashboard} from './LearningDashboard.jsx';
 import {OAAssessment} from './OAAssessment.jsx';
+import {SystemDesignInterview} from './SystemDesignInterview.jsx';
+import {VoiceInput} from './VoiceInput.jsx';
+import {AccountMenu} from './Authentication.jsx';
+export {mountAuthentication} from './Authentication.jsx';
+import {learningViewFromUrl,learningViewUrl} from '../learning-navigation.mjs';
 
 const copy={
   verify:{label:'Verify code',eyebrow:'YOUR VERIFICATION WORKSPACE',title:'Less guessing. More evidence.',description:'Turn your intent into tests, inspect what happens, and make a repair you can explain.',icon:'code',number:'01'},
@@ -32,10 +41,13 @@ function ProblemPicker(){
 function Workspace({screens,footer,initialMode,onMode,onReveal}){
   const [mode,setMode]=useState(initialMode),[menu,setMenu]=useState(false),[commands,setCommands]=useState(false),[query,setQuery]=useState(''),[runner,setRunner]=useState({ready:false,message:t('Checking execution environment')});
   const palette=useRef(null),search=useRef(null),lastFocus=useRef(null);
-  const [learningView,setLearningView]=useState(()=>initialMode==='learn'&&/walkthrough|teacher|lesson/.test(location.hash)?'lessons':'practice');
+  const [learningView,updateLearningView]=useState(()=>learningViewFromUrl(location.href));
+  const setLearningView=view=>{history.replaceState(null,'',learningViewUrl(location.href,view));updateLearningView(view);};
   const [verifyView,setVerifyView]=useState('code');
+  const [interviewView,updateInterviewView]=useState(()=>new URLSearchParams(location.search).get('interview')==='design'?'design':'debug');
+  const setInterviewView=value=>{const url=new URL(location.href);url.searchParams.set('interview',value);history.replaceState(null,'',url.pathname+url.search+url.hash);updateInterviewView(value);};
   const [dark,setDark]=useState(()=>{try{return localStorage.getItem('invarith-assessment-theme')!=='light';}catch{return true;}});
-  useEffect(()=>{const changed=e=>{setMode(e.detail.mode);setLearningView('practice');if(e.detail.mode==='verify')setVerifyView('code');setMenu(false);};document.addEventListener('workspace-view-changed',changed);return()=>document.removeEventListener('workspace-view-changed',changed);},[]);
+  useEffect(()=>{const changed=e=>{setMode(e.detail.mode);updateLearningView(learningViewFromUrl(location.href));if(e.detail.mode==='verify')setVerifyView('code');setMenu(false);};document.addEventListener('workspace-view-changed',changed);return()=>document.removeEventListener('workspace-view-changed',changed);},[]);
   useEffect(()=>{const reveal=e=>{if(e.detail.mode==='learn')setLearningView('lessons');};document.addEventListener('workspace-target-revealed',reveal);return()=>document.removeEventListener('workspace-target-revealed',reveal);},[]);
   useEffect(()=>{document.documentElement.dataset.theme=dark?'dark':'light';},[dark]);
   useEffect(()=>{if(learningView!=='lessons')document.dispatchEvent(new Event('workspace-leave-lesson'));},[learningView]);
@@ -62,16 +74,18 @@ function Workspace({screens,footer,initialMode,onMode,onReveal}){
     </aside>
     {menu&&<button className="studio-nav-backdrop" aria-label={t('Close navigation')} onClick={()=>setMenu(false)}/>}
     <div className="studio-main">
-      <header className="studio-topbar"><div className="studio-breadcrumb"><button className="studio-menu" aria-label={t('Open navigation')} aria-expanded={menu} onClick={()=>setMenu(!menu)}><Icon name={menu?'close':'menu'}/></button><a className="assessment-brand" href={`${locales[locale].path}#mode-verify`}>invarith<span>.</span></a><span className="studio-workspace-word">Workspace</span><i>/</i><strong>{t(current.label)}</strong></div><div className="studio-topbar-actions"><nav className="assessment-mode-nav" aria-label={t('Workspace navigation')}>{Object.entries(copy).map(([key,value])=><button key={key} aria-current={key===mode?'page':undefined} onClick={()=>navigate(key)}>{t(value.label)}</button>)}</nav>{<button className="assessment-theme-toggle" onClick={()=>setDark(value=>{const next=!value;try{localStorage.setItem('invarith-assessment-theme',next?'dark':'light');}catch{}return next;})} aria-label={t(dark?'Switch to light theme':'Switch to dark theme')}>{dark?'☀':'☾'}</button>}<span className="studio-private"><span/> {t('Personal')}</span><nav className="studio-language" aria-label={t('Page language')}>{Object.entries(locales).map(([key,config])=><a key={key} href={`${config.path}${location.hash}`} lang={config.htmlLanguage} aria-current={key===locale?'page':undefined}>{config.label}</a>)}</nav><button className="studio-help" aria-label={t('Quick start')} onClick={()=>document.getElementById('guide-top').click()}><Icon name="help" size={19}/></button></div></header>
+      <header className="studio-topbar"><div className="studio-breadcrumb"><button className="studio-menu" aria-label={t('Open navigation')} aria-expanded={menu} onClick={()=>setMenu(!menu)}><Icon name={menu?'close':'menu'}/></button><a className="assessment-brand" href={`${locales[locale].path}#mode-verify`}>invarith<span>.</span></a><span className="studio-workspace-word">{t('Workspace')}</span><i>/</i><strong>{t(current.label)}</strong></div><div className="studio-topbar-actions"><nav className="assessment-mode-nav" aria-label={t('Workspace navigation')}>{Object.entries(copy).map(([key,value])=><button key={key} aria-current={key===mode?'page':undefined} onClick={()=>navigate(key)}>{t(value.label)}</button>)}</nav>{<button className="assessment-theme-toggle" onClick={()=>setDark(value=>{const next=!value;try{localStorage.setItem('invarith-assessment-theme',next?'dark':'light');}catch{}return next;})} aria-label={t(dark?'Switch to light theme':'Switch to dark theme')}>{dark?'☀':'☾'}</button>}<SmartCodeEditors/><ResizableWorkspaces/><NativeTestCaseEditor dark={dark}/><VoiceInput scope={[mode,learningView,interviewView,verifyView].join(':')}/><AccountMenu/><span className="studio-private"><span/> {t('Personal')}</span><nav className="studio-language" aria-label={t('Page language')}>{Object.entries(locales).map(([key,config])=><a key={key} href={`${config.path}${location.search}${location.hash}`} lang={config.htmlLanguage} aria-current={key===locale?'page':undefined}>{config.label}</a>)}</nav><button className="studio-help" aria-label={t('Quick start')} onClick={()=>document.getElementById('guide-top').click()}><Icon name="help" size={19}/></button></div></header>
       <main className="studio-content" id="studio-content" tabIndex="-1">
         <section className="studio-heading"><div className="studio-heading-copy"><p className="studio-eyebrow"><span/> {t(current.eyebrow)}</p><h1>{t(current.title)}</h1><p className="studio-description">{t(current.description)}</p><div className="studio-heading-tag"><Icon name={current.icon} size={14}/>{t(mode==='learn'?'Visual lessons · In-page narration':mode==='verify'?'Python · Evidence-led verification':'Coaching or strict · Your choice')}</div></div><ConceptCard mode={mode}/></section>
         <LearningDashboard active={mode==='learn'} view={learningView} onView={setLearningView}/>
-        <section className="oa-container" hidden={mode!=='oa'} aria-label={t('OA simulation')}><OAAssessment/></section>
+        {mode==='interview'&&<nav className="interview-mode-nav" aria-label={t('Interview type')}><button type="button" aria-current={interviewView==='debug'?'page':undefined} onClick={()=>setInterviewView('debug')}>{t('Debugging interview')}</button><button type="button" aria-current={interviewView==='design'?'page':undefined} onClick={()=>setInterviewView('design')}>{t('System design')}</button></nav>}
+        <section className="design-interview-container" hidden={mode!=='interview'||interviewView!=='design'}><SystemDesignInterview active={mode==='interview'&&interviewView==='design'}/></section>
+        <section className="oa-container" hidden={mode!=='oa'} aria-label={t('OA simulation')}><OAAssessment active={mode==='oa'}/></section>
         <nav className="desk-workspace-nav" hidden={mode!=='verify'} aria-label={t('Verification workspace')}>{[['code','Your code'],['practice','AI practice lab'],['projects','Project workspace']].map(([key,label])=><button key={key} aria-current={verifyView===key?'page':undefined} onClick={()=>setVerifyView(key)}>{t(label)}</button>)}</nav>
         <section id="learning-practice" className="learning-practice-desk" hidden={mode==='interview'||mode==='oa'||(mode==='learn'&&learningView!=='practice')||(mode==='verify'&&verifyView!=='practice')}><AIPractice showProgress={mode!=='learn'}/></section>
         <section className="desk-library" hidden={mode==='interview'||mode==='oa'||(mode==='learn'&&learningView!=='practice')||(mode==='verify'&&verifyView==='projects')}><ProblemPicker/></section>
         <section className="desk-projects" hidden={mode!=='verify'||verifyView!=='projects'}><ProjectWorkspace/></section>
-        {Object.entries(screens).map(([key,element])=><section key={key} className={`studio-mode studio-mode-${key} studio-secondary-tools`} hidden={key==='oa'||key!==mode||(key==='learn'&&learningView!=='lessons')||(key==='verify'&&verifyView!=='code')} aria-label={t(copy[key].label)}><NativeSlot element={element}/></section>)}
+        {Object.entries(screens).map(([key,element])=><section key={key} className={`studio-mode studio-mode-${key} studio-secondary-tools`} hidden={key==='oa'||key!==mode||(key==='interview'&&interviewView==='design')||(key==='learn'&&learningView!=='lessons')||(key==='verify'&&verifyView!=='code')} aria-label={t(copy[key].label)}><NativeSlot element={element}/></section>)}
         <footer className="studio-footer"><span>invarith <i>/</i> {t('Make your reasoning visible.')}</span><span className="studio-runner"><span className={`studio-status-dot ${runner.ready?'ready':''}`}/>{runner.ready?t('Python runner ready'):t('Runner needs attention')}</span></footer>
         <NativeSlot element={footer} className="studio-legacy-status"/>
       </main>

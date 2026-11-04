@@ -41,3 +41,7 @@ backend/check-*.mjs
 backend/evaluate-*.mjs
 backend/evaluation-fixtures.mjs
 docs/
+
+# Personal practice backup downloads
+invarith-practice-*.json
+invarith-custom-tests-*.py

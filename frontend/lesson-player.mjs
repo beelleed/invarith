@@ -5,6 +5,7 @@ import { buildWalkthrough } from './walkthrough-data.mjs';
 import { drawWalkthrough } from './walkthrough-canvas.mjs';
 import { lessonExamples,buildExampleLesson,frameNarration } from './lesson-examples.mjs';
 import { narrationSegments,teacherCueAt } from './teacher-storyboards.mjs';
+import {practiceLessonInput} from './practice-lesson-input.mjs';
 
 export function initWalkthrough({toast,api,onVerifySolution}){
   const $=id=>document.getElementById(id),node=(tag,text)=>{const element=document.createElement(tag);if(text!==undefined)element.textContent=text;return element;},canvas=$('walkthrough-canvas'),speech=globalThis.speechSynthesis;
@@ -150,10 +151,11 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   document.addEventListener('practice-lesson-requested',event=>{
     const detail=event.detail;if(preparing||!detail||typeof detail.contract!=='string'||!Array.isArray(detail.examples))return;
     event.preventDefault();
-    const examples=detail.examples.map(item=>`${detail.functionName}(${item.args.map(value=>JSON.stringify(value)).join(', ')}) → ${JSON.stringify(item.expected)}`).join('\n').slice(0,1400);
-    $('solution-problem').value=`${detail.title}\n${detail.scenario}\n${detail.contract}\n${detail.functionName}\n${examples}`.slice(0,4000);
+    let transfer;try{transfer=practiceLessonInput(detail,pageLanguage.speech);}catch(error){toast(t(error.message),true);return;}
+    $('solution-problem').value=transfer.problem;
     practiceVisualKind=detail.topic==='tree'?'tree':['bfs','dfs','topo','union','shortest','linked'].includes(detail.topic)?'graph':'auto';
     revealWorkspace('solution-generator-title');
+    if(transfer.omittedExamples)toast(t('The complete question was preserved. {0} oversized examples were not included in the lesson request.',transfer.omittedExamples));
     void generateSolution();
   });
   $('lesson-example').replaceChildren(...lessonExamples.map(example=>{const option=node('option',t(example.title));option.value=example.id;return option;}));$('lesson-example').value='binary-last';

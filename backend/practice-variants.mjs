@@ -98,5 +98,8 @@ export function createPracticeVariants(base){
     'def union_area(a, b):\n    overlap = max(0,min(a[2],b[2])-max(a[0],b[0]))*max(0,min(a[3],b[3])-max(a[1],b[1]))\n    return (a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-overlap','-overlap','+overlap');
   tasks.segment.samples=base.segment.samples.map(([nums,ops])=>[nums,ops.map(([op,...rest])=>[op==='sum'?'max':op,...rest])]);
   tasks.segment.random=r=>{const [nums,ops]=base.segment.random(r);return [nums,ops.map(([op,...rest])=>[op==='sum'?'max':op,...rest])];};
+  // Expiring only timestamp zero cannot reveal an incorrect running total.
+  // Keep positive expirations mandatory instead of relying on random cases.
+  tasks.queue.mandatory=[...(tasks.queue.mandatory||[]),[[1,5]],[[2,5,6]]];
   return tasks;
 }

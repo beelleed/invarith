@@ -25,6 +25,23 @@ export function createHistoryStore(directory) {
   }
   return {
     get,
+    async tasks() {
+      const tasks = await read('verification-tasks.json', []);
+      return tasks.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+    },
+    saveTask: task => serial(async () => {
+      if (!task || !validId(task.id) || typeof task.title !== 'string' || task.title.length > 120 || !Number.isSafeInteger(task.revision) || task.revision < 0) throw new AppError(400, 'Invalid saved question.');
+      const draft=task.draft;
+      const limits={code:24000,functionName:80,intent:4000,cases:30000};
+      if (!draft || Object.entries(limits).some(([key,limit])=>typeof draft[key]!=='string'||draft[key].length>limit) || !['python','javascript','typescript','java','cpp','go','rust','csharp','kotlin','c','ruby','php'].includes(draft.codeLanguage)) throw new AppError(400,'Invalid question draft.');
+      for (const id of [task.activeRunId,task.baselineRunId]) if (id !== null) await get(id);
+      const tasks=await read('verification-tasks.json',[]),index=tasks.findIndex(row=>row.id===task.id),previous=tasks[index];
+      if ((previous?.revision||0)!==task.revision) throw new AppError(409,'This question changed in another tab. Reopen it before saving.');
+      if(index<0&&tasks.length>=500)throw new AppError(400,'Your saved question collection is full.');
+      const saved={id:task.id,title:task.title.trim(),draft:Object.fromEntries(['codeLanguage',...Object.keys(limits)].map(key=>[key,draft[key]])),activeRunId:task.activeRunId,baselineRunId:task.baselineRunId,createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),revision:(previous?.revision||0)+1};
+      if(index<0)tasks.push(saved);else tasks[index]=saved;
+      await write('verification-tasks.json',tasks);return saved;
+    }),
     save: record => serial(() => write(`${record.evidence.id}.json`, record)),
     saveMutationCheck: (id,report) => serial(async()=>{const record=await get(id);record.evidence.mutationCheck=report;await write(`${id}.json`,record);}),
     saveRequirementMap: (id,map,expectedMapId) => serial(async()=>{const record=await get(id);if(expectedMapId && record.evidence.requirementMap?.id!==expectedMapId)throw new AppError(409,'The requirement map changed. Reopen the saved run.');record.evidence.requirementMap=map;await write(`${id}.json`,record);}),

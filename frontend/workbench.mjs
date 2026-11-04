@@ -48,7 +48,7 @@ export function initInterviewDesk(screen){
   ]);
   const codeHeader=node('div','desk-file-heading','solution.py');const language=node('span',null,'Python');codeHeader.append(language);
   const code=get('interview-code'),label=children[14],codeActions=children[18];
-  coding.append(label,codeHeader,code,children[17],codeActions,children[19]);
+  const codePane=node('div','interview-code-pane');codePane.append(label,codeHeader,code,children[17],codeActions,children[19]);coding.append(codePane);
   const tests=children[16];tests.open=true;tests.classList.add('interview-own-tests');
   const output=node('div','interview-output');
   const outputTabs=toolTabs(output,'interview-output','Interview results',[

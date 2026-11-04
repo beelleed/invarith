@@ -1,0 +1,17 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {t} from '../i18n.mjs';
+import {reducibleProbeValue,probeValueLength} from '../probe-reduction.mjs';
+const labels={not_reduced:'No shorter distinguishing input was found within this search. This does not mean your input is minimal.',unstable:'The observed difference did not reproduce consistently. No shorter input is established.',incomplete:'The search could not confirm a final shorter input. Try again explicitly if needed.'};
+export function CustomProbeReduction({session,code,outcome,report,variant,probe,busy,onBusy,onUseCandidate}){
+  const [result,setResult]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),alive=useRef(true),locked=useRef(false),controller=useRef(null);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;controller.current?.abort();};},[]);
+  const eligible=reducibleProbeValue(probe.case.args[0])&&probeValueLength(probe.case.args[0])>0;
+  const reduce=async()=>{if(busy||locked.current)return;locked.current=true;onBusy(true);setLoading(true);setError('');controller.current=new AbortController();
+    try{const response=await fetch('/api/practice/reduce-probe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:session.id,revision:session.customTests.revision,runId:outcome.id,code,checkId:report.checkId,variantId:variant.id,probeId:probe.id,refresh:Boolean(result)}),signal:AbortSignal.any([controller.current.signal,AbortSignal.timeout(180000)])});const value=await response.json();if(!response.ok)throw Error(value.error||'Could not reduce this input.');if(alive.current)setResult(value);}
+    catch(e){if(alive.current)setError(t(e.message));}finally{locked.current=false;onBusy(false);if(alive.current)setLoading(false);}
+  };
+  if(!eligible)return null;
+  return <section className="custom-probe-reduction" aria-label={t('Find a shorter distinguishing input')}><h5>{t('Make the example easier to explain.')}</h5><p>{t('Try removing parts of the first string or array while keeping different return values. Other arguments stay the same.')}</p><button className="secondary-button" disabled={busy} onClick={()=>void reduce()}>{t(loading?'Searching for a shorter input…':result?'Search for a shorter input again · No AI':'Find a shorter input · No AI')}</button>{loading&&<p role="status">{t('Replaying both versions with a few shorter inputs…')}</p>}{error&&<p role="alert">{error}</p>}
+    {result&&(result.status==='reduced'?<><p role="status">{t('A shorter difference was replayed: {0} → {1} elements or characters.',result.reduced.beforeLength,result.reduced.afterLength)}</p><pre>{JSON.stringify({args:result.reduced.case.args,kwargs:result.reduced.case.kwargs},null,2)}</pre><div className="practice-output-comparison">{[['original','Original code'],['changed','Changed code']].map(([key,label])=><div key={key}><strong>{t(label)}</strong><pre>{JSON.stringify(result.reduced[key].actual,null,2)}</pre></div>)}</div><p>{t('This shorter input may violate the question constraints. The original output is only a proposed expectation; review both before keeping it.')}</p><button className="text-button" disabled={busy} onClick={()=>onUseCandidate(result.reduced.case)}>{t('Load the shorter input for review')}</button></>:<p role="status">{t(labels[result.status])}</p>)}<small>{t('This is a bounded search for a smaller observed difference, not proof of a valid or smallest counterexample. Nothing is saved automatically.')}</small>
+  </section>;
+}

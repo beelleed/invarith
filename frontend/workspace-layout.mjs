@@ -37,8 +37,8 @@ export function initWorkspaceLayout(){
   fold('More verification tools',screens.verify,['.repair-panel','.requirements-panel','.mutation-panel','.challenge-next-panel','.shrink-panel','.security-panel']);
   fold('History & execution settings',screens.verify,['.history-panel','.execution-panel']);
   move('.walkthrough-panel',screens.learn);
-  const library=document.querySelector('.lesson-library'),libraryDrawer=document.createElement('details');libraryDrawer.className='tool-drawer';
-  const librarySummary=document.createElement('summary');librarySummary.textContent=t('Built-in lessons & recorded execution replay');libraryDrawer.append(librarySummary);library.before(libraryDrawer);
+  const library=document.querySelector('.lesson-library'),libraryDrawer=document.createElement('section');libraryDrawer.className='tool-drawer lesson-ready-library';
+  const librarySummary=document.createElement('h3');librarySummary.textContent=t('Built-in lessons & recorded execution replay');libraryDrawer.append(librarySummary);library.before(libraryDrawer);
   libraryDrawer.append(library,document.querySelector('.teacher-voice-settings'),document.getElementById('walkthrough-workspace').closest('.walkthrough-actions'));
   fold('Practice & learning history',screens.learn,['.learning-panel','.memory-panel']);
   move('.interview-panel',screens.interview);

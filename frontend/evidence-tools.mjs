@@ -61,7 +61,7 @@ function indexed(record) {
 }
 
 export function compareRuns(before, after) {
-  if (before.submission.functionName !== after.submission.functionName || (before.submission.intent || '').trim() !== (after.submission.intent || '').trim()) return { compatible: false, rows: [], fixed: 0, regressed: 0, added: 0, removed: 0, shared: 0 };
+  if ((before.submission.codeLanguage||'python')!==(after.submission.codeLanguage||'python') || before.submission.functionName !== after.submission.functionName || (before.submission.intent || '').trim() !== (after.submission.intent || '').trim()) return { compatible: false, rows: [], fixed: 0, regressed: 0, added: 0, removed: 0, shared: 0 };
   const oldRows = indexed(before), newRows = indexed(after), oldMap = new Map(oldRows.map(r => [r.key, r]));
   const rows = newRows.map(row => {
     const previous = oldMap.get(row.key);

@@ -1,6 +1,7 @@
 import { compareRuns, codeDiff, caseKey } from './evidence-tools.mjs';
 import { callLabel } from './evidence-view.mjs';
 import { requirementCoverage, requirementLabels } from './requirement-tools.mjs';
+import {chineseReadableReport} from './report-localization.mjs';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const json = value => JSON.stringify(value, null, 2) ?? 'Not recorded';
@@ -8,8 +9,9 @@ const pre = value => `<pre>${escape(value)}</pre>`;
 const status = row => !row ? 'Not run' : row.status === 'passed' ? 'Passed' : row.status === 'error' ? 'Execution error' : 'Wrong output';
 const paragraph = value => `<p>${escape(value)}</p>`;
 
-export function readableReport({ submission, evidence, baseline = null, hints = {}, hintDetails = {}, mentor = {}, editorChanged = false }) {
+export function readableReport({ submission, evidence, baseline = null, hints = {}, hintDetails = {}, mentor = {}, editorChanged = false, language = 'en' }) {
   if (!submission || !evidence || !Array.isArray(evidence.results)) throw new Error('A completed run is required to export a report.');
+  if(language==='zh-TW')return chineseReadableReport({submission,evidence,baseline,hints,hintDetails,mentor,editorChanged});
   const parts = [`<header><p class="eyebrow">INVARITH / VERIFICATION RECORD</p><h1>Know what your code actually does.</h1>${paragraph(`${submission.functionName} · ${evidence.passed}/${evidence.total} supplied cases passed`)}${paragraph(`Run: ${evidence.id || 'Not recorded'} · Executed: ${evidence.createdAt || 'Not recorded'} · Environment: ${evidence.execution || 'Not recorded'}`)}</header>`,
     `<aside>Results describe the completed submission below. They are not a proof of correctness or a security certification.${editorChanged ? ' The workspace draft was edited after this run; those edits are not represented as executed evidence.' : ''}</aside>`,
     `<section><h2>Intended behavior</h2>${paragraph(submission.intent || 'No intent recorded.')}<p>Intent is context; the supplied test expectations determine pass/fail.</p><h3>Executed source</h3>${pre(submission.code)}</section>`];

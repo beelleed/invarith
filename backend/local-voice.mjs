@@ -21,14 +21,14 @@ export function createVoiceWorker({python=join(root,'.venv-tts',process.platform
   return {close:stop,async render(request){if(pending)throw new AppError(429,'Another local narration is being prepared. Try again shortly.');clearTimeout(idle);if(!child)start();return new Promise((resolve,reject)=>{const id=randomUUID(),timeout=setTimeout(()=>{if(pending?.id===id)stop();},120000);pending={id,resolve,reject,timeout};child.stdin.write(JSON.stringify({...request,id})+'\n');});}};
 }
 
-export function createLocalVoice({directory=join(root,'data/local-voice'),renderer,namespace,voiceChoices,worker=createVoiceWorker()}={}){
+export function createLocalVoice({directory=join(root,'data/local-voice'),readinessDirectory=directory,renderer,namespace,voiceChoices,worker=createVoiceWorker()}={}){
   const pending=new Map(),audioDirectory=join(directory,'audio');let active=false;
   const render=renderer || (request=>worker.render(request));
   const keyFor=(language,text,voice,segments)=>createHash('sha256').update(JSON.stringify(namespace?[namespace,language,voice,text,...(segments?[segments]:[])]:[language==='zh-TW'?'kokoro-local-v1.1-zh-phrasing-v2':'kokoro-local-v1.1-zh-voice-v1',language,text,...(segments?[segments]:[])])).digest('hex');
   const metadata=async id=>{try{return JSON.parse(await readFile(join(audioDirectory,`${id}.json`),'utf8'));}catch(error){if(error.code==='ENOENT')return null;throw new AppError(503,'Saved narration metadata could not be read.');}};
   return {
     close:()=>worker.close(),
-    async health(){try{const ready=JSON.parse(await readFile(join(directory,'ready.json'),'utf8'));return {ready:ready.version===1,engine:'Kokoro · Local CPU',languages:ready.languages?.map(item=>item.language) || [],message:'Free local neural voice. Previously generated audio is reused.'};}catch{return {ready:false,languages:[],message:'Local neural voice is not installed. Browser voices and captions remain available.'};}},
+    async health(){try{const ready=JSON.parse(await readFile(join(readinessDirectory,'ready.json'),'utf8'));return {ready:ready.version===1,engine:'Kokoro · Local CPU',languages:ready.languages?.map(item=>item.language) || [],message:'Free local neural voice. Previously generated audio is reused.'};}catch{return {ready:false,languages:[],message:'Local neural voice is not installed. Browser voices and captions remain available.'};}},
     async prepare(body){
       if(!['en-US','zh-TW'].includes(body.language) || typeof body.text!=='string' || !body.text.trim() || body.text.length>1800)throw new AppError(400,'Choose English or Mandarin and provide up to 1,800 characters.');
       if(voiceChoices && !voiceChoices.includes(body.voice))throw new AppError(400,'Choose an available voice.');
