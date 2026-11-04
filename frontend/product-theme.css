@@ -422,3 +422,13 @@ html[data-theme=dark] body>dialog{color-scheme:dark;background:#24252d;color:#d9
 .product-shell:not(.assessment-dark){color-scheme:light}
 .product-shell #mode-learn .lesson-library{border-color:var(--ui-line)}
 .product-shell .oa-code-box>header .text-button{background:var(--ui-raised);color:var(--ui-accent);border:1px solid var(--ui-line)}
+
+.product-shell :is(.mutation-card,.requirement-card){background:var(--ui-raised);color:var(--ui-text);border-color:var(--ui-line)}
+.product-shell .mutation-card.detected{border-left-color:var(--ui-good)}
+.product-shell .mutation-card.survived{border-left-color:var(--ui-warn)}
+.product-shell :is(.mutation-observation,.requirement-state,.requirement-totals>span,.mutation-card pre){background:var(--ui-soft);color:var(--ui-text)}
+
+.product-shell .comparison-stats>div{background:var(--ui-raised);border-color:var(--ui-line);color:var(--ui-text)}
+.product-shell .comparison-stats span,.product-shell .comparison-content>p,.product-shell .mutation-results :is(p,small){color:var(--ui-muted)}
+.product-shell .comparison-stats .fixed{color:var(--ui-good)}
+.product-shell .comparison-stats .regressed{color:var(--ui-warn)}
