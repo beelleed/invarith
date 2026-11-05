@@ -8,7 +8,7 @@ Invarith is an evidence-driven coding practice, debugging and interview workspac
 - Execute code in isolated containers and compare actual outputs with explicit expectations; inspect Python execution traces for failing cases.
 - Compare repairs against a saved baseline and check for regressions.
 - Practice interviews with guided hints or an examiner that withholds hints.
-- Practice system design across 25 topic families, with an editable architecture diagram, workload estimates, coaching or strict questioning, saved follow-ups and worked teaching walkthroughs.
+- Practice system design across 26 topic families plus custom topics, with an editable architecture diagram, workload estimates, coaching or strict questioning, saved follow-ups and worked teaching walkthroughs.
 - Learn through animated lessons, optional narration and learning progress records.
 
 ---
