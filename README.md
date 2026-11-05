@@ -1,25 +1,46 @@
-# Invarith
+# 🔍 Invarith
 
 Know what your code actually does. Verify with evidence. Learn with confidence.
 
 Invarith is an evidence-driven coding practice, debugging and interview workspace with English and Traditional Chinese interfaces. Manual verification and coding practice support 12 programming languages; advanced execution traces and several guided exercises currently use Python.
 
-- Generate algorithm and debugging exercises, or bring your own code and cases.
+- Generate original coding questions, open prepared debugging/optimization exercises, or bring your own code and cases.
 - Execute code in isolated containers and compare actual outputs with explicit expectations; inspect Python execution traces for failing cases.
 - Compare repairs against a saved baseline and check for regressions.
 - Practice interviews with guided hints or an examiner that withholds hints.
 - Practice system design across 25 topic families, with an editable architecture diagram, workload estimates, coaching or strict questioning, saved follow-ups and worked teaching walkthroughs.
 - Learn through animated lessons, optional narration and learning progress records.
 
-## How it works
+---
+
+## 🗺️ Core workspaces
+
+| Workspace | What you can do |
+| --- | --- |
+| Verify code | Describe a function, review test expectations, run code, inspect Python traces, and compare a repair with its baseline. |
+| AI practice lab | Generate new coding questions or open prepared coding, bug-repair and supported optimization exercises; run public, hidden and custom tests. |
+| Learning studio | Review topic progress, daily goals, 14-day activity, notes, saved plans, practice lists and review queues. |
+| Solution lessons | Request an animated, narrated explanation from a problem and optional unfinished code, then explicitly start playback with synchronized captions. |
+| Mock interview | Practice explaining and repairing code with coaching or strict questioning, a timer, your own tests and saved evaluations. |
+| System design | Generate design questions, clarify requirements, estimate capacity, draw growing architecture diagrams, answer failure scenarios and review your reasoning. |
+| OA simulation | Combine prepared or previously saved practice questions in a timed assessment, then review and retry individual questions. |
+| Project workspace | Edit multiple Python files, choose an entry function, and verify their combined behavior. |
+
+New AI coding questions are checked using two different generated implementations on application-created small inputs. Prepared debug exercises use authored defects and distinguishing cases; the limited AI assistant offers a short suggestion without seeing private tests. Its optional delay simulates slower assistance, not a guarantee that the model is less capable. OA currently selects prepared or saved questions; it does not generate a new unseen exam in one click.
+
+---
+
+## ⚙️ How it works
 
 The frontend uses React and CodeMirror. A Node.js HTTP backend manages accounts, saved work and verification workflows. Docker provides isolated execution; Modal is an optional Python runner. Records are saved as private server-side files. This repository does not require Next.js, FastAPI or a hosted database.
 
 The configured Meta model proposes verification plans, generates original exercises, asks interview follow-ups and explains observed failures. It does not decide whether a program passes a test: the runner and application judge compare executed output against reviewed expectations. Generated questions are checked by comparing two generated implementations on application-created inputs; agreement is a consistency check, not proof of correctness.
 
-## Run locally
+---
 
-Install Node.js 20.12 or newer and Docker Desktop with Linux containers enabled. From the repository directory:
+## 🚀 Run locally
+
+Install Node.js 24 LTS (recommended) and Docker Desktop with Linux containers enabled. From the repository directory:
 
 ```sh
 npm ci
@@ -32,9 +53,11 @@ Copy `.env.example` to `.env`, then start the app:
 npm start
 ```
 
-Open [English](http://127.0.0.1:3210/en/) or [Traditional Chinese](http://127.0.0.1:3210/zh-TW/). `npm start` builds the React interface and localized pages automatically. Use `npm run dev` for backend watch mode or `npm run build` to rebuild the interface.
+After the local server starts, open [English](http://127.0.0.1:3210/en/) or [Traditional Chinese](http://127.0.0.1:3210/zh-TW/) on that computer. These are local development addresses, not public demo links. `npm start` builds the React interface and localized pages automatically. Use `npm run dev` for backend watch mode or `npm run build` to rebuild the interface.
 
-## Accounts and personal records
+---
+
+## 👤 Accounts and personal records
 
 Create an account on the sign-in page. Passwords are salted and hashed with scrypt; opaque sessions use HttpOnly, SameSite cookies. Records are stored on this server under `data/users/<account-id>/`, and browser drafts/preferences are scoped by account and practice workspace. The same server and account can be used from another device; unsaved browser drafts stay on the browser where they were edited. Registration grants access immediately. Change a known password from the account menu, or recover a forgotten password using an emailed code when the server has SMTP configured. A saved recovery key is an additional option. No separate email-verification step is required to practice.
 
@@ -50,7 +73,9 @@ Add `--apply` to copy the previewed records into that account's current workspac
 
 For remote hosting, use HTTPS, configure `APP_ORIGIN` to the trusted public origin, and set `HOST` explicitly. Keep the `data/` directory private and back it up. The exported `createApp` is an internal unauthenticated application factory used for isolated tests; `backend/server.mjs` and `npm start` run the account-protected server.
 
-## AI configuration
+---
+
+## 🤖 AI configuration
 
 In `.env`, set `AI_CHAT_URL`, `AI_API_KEY` and `AI_MODEL` for your provider's OpenAI-compatible chat-completions endpoint. `.env.meta.example` is an example for Meta; use the endpoint and model currently available to your account. Never commit a populated environment file.
 
@@ -62,7 +87,9 @@ Open **Mock interview → System design** for the URL-shortener exercise. Starti
 
 The practice desk starts with **New AI question** for newly generated contracts. Choose **Curated practice → Open ready practice** to open prepared coding or debugging questions without a model request. Supported optimization questions also open this way. Topic, difficulty and level filters still apply; prepared contracts and bug versions rotate within the finite collection rather than claiming unlimited new questions. Existing sessions and their test evidence are preserved.
 
-## Optional Python services
+---
+
+## 🐍 Optional Python services
 
 The default Docker runner needs no host Python installation. For optional services, use a separate Python virtual environment:
 
@@ -84,7 +111,9 @@ python backend/local-voice.py --setup
 
 The speech models may require an initial download. Browser voices and captions remain available without optional speech packages. `requirements-tts.lock.txt` records the reference speech environment.
 
-## Repository layout
+---
+
+## 📁 Repository layout
 
 - `backend/`: account-protected application services and isolated Python/polyglot execution bridges.
 - `frontend/`: React workspace, browser modules, styles and translations.
@@ -94,15 +123,19 @@ Generated interface bundles, dependencies, credentials, local learning data, dev
 
 By default the server runs on your local machine. Saved account records and generated audio live on that server. Another device can access the same saved records when it connects to the same running server; browser-only drafts and preferences are not synchronized. Public hosting still requires HTTPS, a trusted origin, persistent private storage, backups and a stable deployment. A temporary tunnel is a review link, not a production hosting setup.
 
-## Practice backups
+---
+
+## 💾 Practice backups
 
 In Learning studio → Learning records, download a JSON backup of saved practice questions, submissions, solution notes, debug journals and practice lists. On another Invarith installation, choose that file, review the preview, then restore missing records. Existing records are preserved; lists with an existing ID or name are skipped.
 
 Browser-only drafts, interviews, recordings and API settings are excluded. Backups contain saved code and test expectations, so keep them private. Restoring imports history without executing code or requesting AI feedback.
 
-## Custom practice tests
+---
 
-Below the practice editor, choose **My tests → My custom tests** to save up to ten input/expected-return checks per question. Arguments use JSON arrays, optional named arguments use JSON objects, and expected returns use JSON values. Copy the first public example as a starting point, or add a boundary case of your own.
+## 🧪 Custom practice tests
+
+Below the practice editor, choose **My tests → My custom tests** to save up to ten input/expected-return checks per question. The visual editor shows named inputs and expected returns separately; raw JSON is available in advanced editing. Values must be JSON-compatible. Copy the first public example as a starting point, or add a boundary case of your own.
 
 Save changes before running. Checks use isolated Python execution with no AI request. Results compare against your own expectations and do not change hidden-test grades, submission history or learning progress. Saved suites are included in practice backups; unsaved drafts stay in that browser. A fresh retry starts with an empty custom suite.
 
@@ -120,7 +153,9 @@ After a custom run, **Download runnable custom tests** exports one Python file c
 
 The exported file executes the saved code. Use an isolated Python environment and run `python invarith-custom-tests-XXXXXXXX.py` with the downloaded filename. This is a conventional test replay, not Invarith's sandbox or trace capture; it does not reproduce the application's resource limits. Exporting itself executes nothing, uses no AI credits and leaves learning records unchanged.
 
-## Solution planning
+---
+
+## 📝 Solution planning
 
 In a practice question, choose the **Plan** tab for **My solution plan** and the **Notes** tab for your solution notes. Work through understanding and approach, boundary cases, and time/space reasoning before coding. **Rehearse my explanation** gathers your written ideas into an outline for speaking practice. Plans are learner notes, not correctness or complexity assessments; they use no AI credits and do not affect grades or learning totals.
 
@@ -128,7 +163,9 @@ Drafts remain in the browser until you choose **Save solution plan**. Saved plan
 
 In **Learning records → My learning notebook → Saved solution plans**, search your saved reasoning or filter by topic. The collection includes older saved questions with pagination. Choose **Recall this plan** to explain the approach before revealing your notes, or open the original question. Recall drafts last only while that review stays open; they are not graded and do not count as practice submissions.
 
-## Practice workspace navigation
+---
+
+## 🧭 Practice workspace navigation
 
 The question column has **Question**, **Plan**, **Notes** and **Practice options** tabs. Interview, lesson, retry and related-question actions live in Practice options. Your code editor stays visible above **Results**, **My tests**, **Debug journal**, **Explain aloud**, **Versions** and **AI assistant**. Panels keep their mounted state when switched; leaving the oral panel stops microphone capture and audio playback.
 
@@ -140,13 +177,15 @@ Code inputs offer **Code editor** and **Whiteboard mode**. The code editor provi
 
 In **Verify code → Description**, enter a **Question title**. Edits automatically save each question's current language, source, intended behavior and test-case draft, even when code or cases are unfinished. Use **New question** to start another draft and **Saved questions** to resume one. **Save now** flushes the pending save. Completed evidence and the selected comparison baseline remain linked to the question; edited code still needs a fresh verification run. Questions are stored with the signed-in account on the server, with a browser copy while synchronization is pending.
 
-Reloading resumes the last question and its selected tool panels for that page language, using the browser's saved code draft when available. English and Traditional Chinese keep separate resume pointers. Missing questions clear only their pointer, not code drafts; a temporary load failure offers an explicit retry. Resuming only reads saved data and never generates a question or calls a model automatically. Browser resume preferences are not included in practice backups.
+The initial verification workspace and newly created coding attempts start with an empty editor. Saved questions and browser drafts remain available through explicit open/resume controls; practice offers **Resume my last practice** when a saved pointer exists. English and Traditional Chinese keep separate practice resume pointers. Opening a saved question reads stored data without generating a question or calling a model. Prepared debugging code can be loaded explicitly with **Load code to debug**. Project examples first load their file names and contract; source files are loaded separately. Browser resume preferences are not included in practice backups.
 
 Unsent oral explanations are kept in the browser separately for each interview, question and round. Reloading restores that text without sending it. Failed submissions retain the draft; an accepted explanation clears only the completed round. Editing code does not discard the conversation, which remains labeled as referring to its earlier tested version. Audio recordings remain page-only and are not stored with text drafts. Browser explanation drafts are not part of practice backups.
 
 Opening a solution lesson from practice preserves the complete function contract and function name. Public examples are included whole when they fit; oversized examples are omitted with a notice rather than cut in half. A contract that cannot fit the lesson request is rejected before any model request, leaving the existing lesson input unchanged. Generated teaching and code still need review and verification.
 
-## Programming languages
+---
+
+## 💻 Programming languages
 
 Verification and coding practice support 12 languages: Python 3.12, JavaScript (Node 24), TypeScript 5.9, Java 17, C++17, Go 1.19, Rust 1.63, C# 7.2 (Mono), Kotlin 1.3, C17 (cJSON), Ruby 3.1 and PHP 8.2. Select a language above the editor. Each language keeps a separate browser draft; completed practice submissions also retain their language and source on the server. The same public and hidden expectations are used for every language. Switching languages clears the displayed result until that draft is run. Learning statistics include completed submissions in all 12 languages.
 
@@ -166,7 +205,9 @@ Python-specific prepared debug/optimization exercises, line-event traces, mutati
 
 Non-Python execution rejects unsafe JSON integers rather than silently rounding them, rejects NaN/infinity, and compares booleans separately from numbers. Floats use exact JSON numeric equality, without an implicit tolerance. Typed Java, Kotlin, Go, Rust, C# and C++ parameters reject incompatible primitive JSON shapes rather than coercing strings or fractions into integers. Each case starts a fresh learner process. New languages share the same explicit expectations and private judge as existing practice; this improves reproducibility but cannot establish that AI-generated expectations are correct.
 
-## Password recovery by email
+---
+
+## 🔐 Password recovery by email
 
 Registration grants access without a separate email-verification step or unverified-email badge. Users can select **Forgot your password? Reset by email** on the sign-in page and prove ownership with the emailed eight-digit code. Recovery keys remain available as a backup. Changing an email clears its verified status; a password reset preserves the account and records, rotates its recovery key, and invalidates previous sessions.
 
