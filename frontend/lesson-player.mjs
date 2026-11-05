@@ -15,7 +15,7 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   $('lesson-voice-engine').value=locale==='zh-TW'?'kokoro':pageLanguage.engine;
   if(locale==='en'){$('lesson-voice-engine').querySelector('option[value="taiwan"]').hidden=true;document.querySelector('.teacher-voice-settings').hidden=true;}
   let record=null,deck=null,index=0,origin='none',label=t("Saved verification run"),workspace=null,workspaceIndex=0,workspaceKey=null,lastMainIndex=null,currentKey=null,stale=false,playing=false,timer=null,epoch=0,audioLoading=false,preparing=false,voice=null;
-  let utterance=null,generatingSolution=false;
+  let utterance=null,generatingSolution=false,awaitingLessonStart=false,pendingAttempt='';const preparedNarration=new Map();
   let teacherStep=0,animation=null;const teacherAnswers=new Map();
   const audio=$('lesson-natural-audio');let naturalReady=false;
   const previews=[...document.querySelectorAll('.teacher-voice-settings audio')];
@@ -26,11 +26,11 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   void api('/api/local-voice').then(status=>{naturalReady=status.ready;voiceAvailability();}).catch(()=>voiceAvailability());
   document.addEventListener('workspace-leave-lesson',()=>{stop();render();});
   function stop(clear=false){playing=false;clearTimeout(timer);timer=null;cancelAnimationFrame(animation);audioLoading=false;if(clear){epoch++;speech?.cancel();utterance=null;voice=null;audio.pause();audio.removeAttribute('src');audio.load();audio.hidden=true;}else{if(utterance)speech?.pause();audio.pause();}}
-  function paintTeaching(){const frame=deck?.frames[index];if(!frame?.teaching)return;const cue=frame.teaching.cues[teacherStep];drawWalkthrough(canvas,deck,index,playing?Math.min(1,Math.max(0,audio.currentTime-(voice?.cueTimes?.[teacherStep] ?? 0))/.8):1,teacherStep);$('teacher-idea').textContent=cue.note;$('teacher-step-status').textContent=t("Idea {0} / {1}", teacherStep+1, frame.teaching.cues.length);$('teacher-previous').disabled=preparing || teacherStep===0;$('teacher-next').disabled=preparing || teacherStep===frame.teaching.cues.length-1;canvas.setAttribute('aria-label',`${frame.title}. ${cue.note}`);}
+  function paintTeaching(){const frame=deck?.frames[index];if(!frame?.teaching)return;const cue=frame.teaching.cues[teacherStep];drawWalkthrough(canvas,deck,index,playing?Math.min(1,Math.max(0,audio.currentTime-(voice?.cueTimes?.[teacherStep] ?? 0))/.8):1,teacherStep);$('teacher-idea').textContent=cue.note;$('lesson-live-captions').hidden=false;$('lesson-live-captions').textContent=pageLanguage.speech==='zh-TW'?cue.zh:cue.en;$('teacher-step-status').textContent=t("Idea {0} / {1}", teacherStep+1, frame.teaching.cues.length);$('teacher-previous').disabled=preparing || teacherStep===0;$('teacher-next').disabled=preparing || teacherStep===frame.teaching.cues.length-1;canvas.setAttribute('aria-label',`${frame.title}. ${cue.note}`);}
   function animateTeaching(job){cancelAnimationFrame(animation);const tick=()=>{if(job!==epoch || !playing || !deck?.frames[index]?.teaching)return;paintTeaching();animation=requestAnimationFrame(tick);};animation=requestAnimationFrame(tick);}
   function syncTeaching(){const count=deck?.frames[index]?.teaching?.cues.length;if(!count)return;const step=teacherCueAt(voice?.cueTimes,audio.currentTime,count);if(step!==null)teacherStep=step;$('teacher-sync-note').textContent=step===null?t("Use Previous / Next idea to explore the diagram. Automatic audio alignment is unavailable for this clip."):t("Diagram changes follow the generated speech timing. Use the audio controls to pause or seek.");paintTeaching();}
   function render(){
-    const ready=Boolean(deck),frame=deck?.frames[index];$('walkthrough-stage').hidden=!ready;
+    const ready=Boolean(deck),frame=deck?.frames[index];const library=$('lesson-example').closest('.lesson-ready-library');if(library)library.hidden=generatingSolution||awaitingLessonStart;$('walkthrough-stage').hidden=!ready||awaitingLessonStart;$('lesson-ready').hidden=!awaitingLessonStart||preparing;
     const taiwanOption=$('lesson-voice-engine').querySelector('option[value="taiwan"]');taiwanOption.disabled=!(origin==='example'||origin==='generated'&&$('solution-online').checked) || locale!=='zh-TW';
     if(taiwanOption.disabled && $('lesson-voice-engine').value==='taiwan')$('lesson-voice-engine').value='kokoro';
     $('lesson-example-open').disabled=preparing;$('lesson-example').disabled=preparing;$('walkthrough-workspace').disabled=!workspace || preparing;
@@ -54,7 +54,7 @@ export function initWalkthrough({toast,api,onVerifySolution}){
     if(origin==='generated'&&ready)$('solution-rehearsal-text').textContent=deck.context.interviewSummary;
     if(!ready)return;
     teacherStep=Math.min(teacherStep,(frame.teaching?.cues.length || 1)-1);drawWalkthrough(canvas,deck,index,1,teacherStep);canvas.setAttribute('aria-label',`${frame.title}. ${frame.caption}`);
-    $('teacher-panel').hidden=!frame.teaching;
+    $('teacher-panel').hidden=!frame.teaching;$('lesson-live-captions').hidden=!frame.teaching;
     if(frame.teaching){paintTeaching();$('teacher-sync-note').textContent=voice?.cueTimes?t("Diagram changes follow generated speech timing."):t("Each idea has its own diagram. Narrated playback advances the illustration with the explanation.");}
     $('teacher-checkpoint').hidden=!frame.checkpoint;
     if(frame.checkpoint){const chosen=teacherAnswers.get(index);$('teacher-question').textContent=frame.checkpoint.question;$('teacher-choices').replaceChildren(...frame.checkpoint.choices.map((choice,choiceIndex)=>{const button=node('button',choice);button.setAttribute('aria-pressed',String(chosen===choiceIndex));button.addEventListener('click',()=>{teacherAnswers.set(index,choiceIndex);stop();render();});return button;}));$('teacher-feedback').textContent=chosen===undefined?t("Make a prediction. No model call or execution is needed."):`${chosen===frame.checkpoint.correct?t("Yes."):t("Try the range meaning again.")} ${frame.checkpoint.explanation}`;$('teacher-continue').hidden=chosen===undefined;}
@@ -62,7 +62,7 @@ export function initWalkthrough({toast,api,onVerifySolution}){
     $('walkthrough-seek').max=String(deck.frames.length-1);$('walkthrough-seek').value=String(index);
     $('lesson-chapters').replaceChildren(...deck.frames.map((chapter,chapterIndex)=>{const option=node('option',`${chapterIndex+1}. ${chapter.title}`);option.value=String(chapterIndex);return option;}));$('lesson-chapters').value=String(index);
     $('walkthrough-caption').textContent=frame.caption;$('lesson-chapter-title').textContent=frame.title;
-    $('walkthrough-timing').textContent=frame.teaching?t("The diagrams explain the idea. The final chapter compares real execution evidence. Pause and predict before revealing the reasoning."):`${deck.context.timingNote} ${deck.context.traceNote}${deck.context.partial?t(' Omitted events cannot be reconstructed.'):''}`;
+    $('walkthrough-timing').textContent=frame.teaching&&origin==='generated'?t('Follow the idea, try the example, and explain the solution in your own words.'):frame.teaching?t("The diagrams explain the idea. The final chapter compares real execution evidence. Pause and predict before revealing the reasoning."):`${deck.context.timingNote} ${deck.context.traceNote}${deck.context.partial?t(' Omitted events cannot be reconstructed.'):''}`;
     $('lesson-narration-text').textContent=$('lesson-language').value==='off'?frameNarration(deck,index,pageLanguage.speech):frameNarration(deck,index,$('lesson-language').value);
     $('lesson-voice-status').textContent=voice?t("{0} · {1} · {2} · {3}0 API tokens", voice.voice, voice.language, voice.engine || t('Browser voice'), voice.cached?t('Saved audio reused · '):''):$('lesson-language').value==='off'?t("Narration off. Captions and diagrams remain available."):$('lesson-voice-engine').value==='taiwan'?t("Taiwan voice: first generation sends public lesson narration to Microsoft; saved audio is reused."):$('lesson-voice-engine').value==='kokoro'?t("Free neural voice. First generation can take a moment; later plays reuse saved audio."):t("Basic browser voice. No API fee.");
     $('lesson-audio-panel').hidden=$('lesson-language').value==='off';
@@ -75,6 +75,15 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   }
   function jump(position){stop(true);teacherStep=0;index=Math.min(Math.max(0,position),deck.frames.length-1);$('lesson-voice-progress').textContent=t("Ready to narrate this chapter.");render();}
   function advance(job){if(job!==epoch || !playing)return;if(deck.frames[index].checkpoint && !teacherAnswers.has(index)){stop();render();$('teacher-checkpoint').scrollIntoView({behavior:'smooth',block:'center'});return;}if(index>=deck.frames.length-1){playing=false;cancelAnimationFrame(animation);render();return;}index++;teacherStep=0;render();void playFrame(job);}
+  async function prepareFrameVoice(at){
+    const language=$('lesson-language').value,engine=$('lesson-voice-engine').value,key=JSON.stringify([deck.lessonId||deck.exampleId||currentKey,at,language,engine,$('lesson-taiwan-voice').value]);
+    if(preparedNarration.has(key))return preparedNarration.get(key);
+    const text=frameNarration(deck,at,language),segments=narrationSegments(deck,at,language);
+    const result=engine==='taiwan'?await api('/api/lessons/taiwan-narration',{...(origin==='generated'?{lessonId:deck.lessonId,allowOnline:$('solution-online').checked}:{exampleId:deck.exampleId}),lessonVersion:deck.lessonVersion,chapterIndex:at,voice:$('lesson-taiwan-voice').value}):await api('/api/lessons/narration',{language,text,...(segments?{segments}:{})});
+    if(!/^\/api\/(?:taiwan-)?lesson-audio\/[a-f0-9]{64}\.wav$/.test(result.url))throw Error(t('The voice returned an invalid audio URL.'));
+    const response=await fetch(result.url);if(!response.ok)throw Error(t('Saved narration could not be played. Choose Browser voice or captions to continue.'));
+    const ready={...result,playURL:URL.createObjectURL(await response.blob())};preparedNarration.set(key,ready);return ready;
+  }
   async function playFrame(job){
     if(job!==epoch || !playing)return;
     const language=$('lesson-language').value;
@@ -83,18 +92,17 @@ export function initWalkthrough({toast,api,onVerifySolution}){
     try{
       if(['kokoro','taiwan'].includes($('lesson-voice-engine').value)){
         const taiwan=$('lesson-voice-engine').value==='taiwan';
-        const segments=narrationSegments(deck,index,language);
-        const result=taiwan?await api('/api/lessons/taiwan-narration',{...(origin==='generated'?{lessonId:deck.lessonId,allowOnline:$('solution-online').checked}:{exampleId:deck.exampleId}),lessonVersion:deck.lessonVersion,chapterIndex:index,voice:$('lesson-taiwan-voice').value}):await api('/api/lessons/narration',{language,text:spoken,...(segments?{segments}:{})});
+        const result=await prepareFrameVoice(index);
         if(job!==epoch || !playing)return;
         if(!/^\/api\/(?:taiwan-)?lesson-audio\/[a-f0-9]{64}\.wav$/.test(result.url))throw new Error(t("The voice returned an invalid audio URL."));
-        voice=result;audio.src=result.url;audio.playbackRate=Number($('lesson-voice-rate').value);audio.hidden=false;
+        voice=result;audio.dataset.lessonAudioUrl=result.url;audio.src=result.playURL||result.url;audio.playbackRate=Number($('lesson-voice-rate').value);audio.hidden=false;
         previews.forEach(sample=>sample.pause());
         audio.onplay=()=>{if(job===epoch){playing=true;audioLoading=false;syncTeaching();render();animateTeaching(job);}};
         audio.onpause=()=>{if(job===epoch && !audio.ended){playing=false;render();}};
         audio.ontimeupdate=()=>{if(job===epoch && Number.isFinite(audio.duration)){$('lesson-voice-progress').textContent=t("Chapter {0} · {1} / {2} seconds · {3}", index+1, audio.currentTime.toFixed(1), audio.duration.toFixed(1), result.cached?t('Saved audio'):taiwan?t('Taiwan online voice'):t('Generated locally'));syncTeaching();}};
         audio.onended=()=>{if(job===epoch){$('lesson-voice-progress').textContent=t("Chapter narration completed.");advance(job);}};
         audio.onerror=()=>{if(job===epoch){stop(true);toast(t("Saved narration could not be played. Choose Browser voice or captions to continue."),true);render();}};
-        try{await audio.play();}catch(error){if(job!==epoch)return;if(error.name==='NotAllowedError'){playing=false;audioLoading=false;toast(t("Press play on the chapter audio controls to start narration."),true);render();return;}throw error;}return;
+        try{await audio.play();}catch(error){if(job!==epoch)return;if(error.name==='NotAllowedError'){playing=false;audioLoading=false;awaitingLessonStart=true;toast(t('Press Start lesson with sound to retry.'),true);render();return;}throw error;}return;
       }
       const matching=browserVoices().filter(voice=>voice.lang===language),selected=matching.find(voice=>/Zira|Hanhan/.test(voice.name)) || matching[0];
       if(!speech || !selected || typeof globalThis.SpeechSynthesisUtterance!=='function')throw new Error(t("No matching local voice is available. Choose captions only to continue."));
@@ -108,10 +116,10 @@ export function initWalkthrough({toast,api,onVerifySolution}){
       speech.speak(request);
     }catch(error){if(job!==epoch)return;stop(true);toast(error.message,true);render();}
   }
-  function play(){if(playing){stop();render();return;}if(audio.getAttribute('src') && !audio.ended){playing=true;void audio.play().catch(()=>{playing=false;toast(t("Press play on the audio controls to resume."),true);render();});render();return;}if(utterance && speech?.paused){playing=true;speech.resume();render();return;}if(index===deck.frames.length-1)jump(0);playing=true;const job=++epoch;void playFrame(job);render();}
+  function play(){if(playing){stop();render();return;}if(audio.getAttribute('src') && !audio.ended){playing=true;void audio.play().catch(()=>{playing=false;awaitingLessonStart=true;toast(t('Press Start lesson with sound to retry.'),true);render();});render();return;}if(utterance && speech?.paused){playing=true;speech.resume();render();return;}if(index===deck.frames.length-1)jump(0);playing=true;const job=++epoch;void playFrame(job);render();}
   function choices(){const selected=record?.evidence.results || [];$('walkthrough-case').replaceChildren(...selected.map(row=>{const option=node('option',t("Test {0} · {1} · {2} events", row.index+1, t(row.status==='passed'?'Passed':row.status==='failed'?'Mismatch':row.status==='error'?'Error':row.status), row.trace?.length || 0));option.value=String(row.index);option.disabled=!row.trace?.length;return option;}));}
   function setRecord(value,caseIndex,nextOrigin,nextLabel){
-    stop(true);teacherStep=0;teacherAnswers.clear();record=JSON.parse(JSON.stringify(value));origin=nextOrigin;label=nextLabel;currentKey=`${nextOrigin}:${record.evidence.id || record.submission.code}`;choices();
+    stop(true);awaitingLessonStart=false;teacherStep=0;teacherAnswers.clear();record=JSON.parse(JSON.stringify(value));origin=nextOrigin;label=nextLabel;currentKey=`${nextOrigin}:${record.evidence.id || record.submission.code}`;choices();
     const chosen=record.evidence.results.find(row=>row.index===caseIndex && row.trace?.length) || record.evidence.results.find(row=>row.trace?.length);
     try{deck=localizePresentation(buildWalkthrough(record,chosen?.index ?? caseIndex,label));}catch{deck=null;}index=0;$('walkthrough-case').value=String(chosen?.index ?? caseIndex);render();
   }
@@ -129,30 +137,40 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   $('lesson-taiwan-voice').addEventListener('change',()=>{localStorage.setItem(preferenceKey('invarith-taiwan-voice'),$('lesson-taiwan-voice').value);localStorage.setItem(preferenceKey('invarith-lesson-voice-engine'),'taiwan');if(origin==='example'||origin==='generated'&&$('solution-online').checked){stop(true);$('lesson-voice-engine').value='taiwan';$('lesson-language').value='zh-TW';render();toast(t("Taiwan voice selected. Press Watch lesson to listen."));}});
   $('solution-verify').addEventListener('click',()=>{if(preparing||origin!=='generated'||!deck||!onVerifySolution)return;const imported=onVerifySolution({id:deck.lessonId,title:deck.context.lessonTitle,problem:deck.context.summary.call,code:deck.context.repairCode});if(imported)stop();});
   $('solution-sample').addEventListener('click',()=>{practiceVisualKind='auto';$('solution-problem').value=locale==='zh-TW'?'給定一個已由小到大排序的整數陣列 nums 和整數 target，找出兩個不同索引，使對應數字相加等於 target。回傳這兩個從 0 開始的索引；沒有解則回傳 []。可以假設最多一組解。例子：nums = [1, 2, 4, 6, 9]，target = 8，應回傳 [1, 3]。請說明為什麼可以用左右指針，以及每次移動的理由。':'Given an ascending sorted integer array nums and integer target, return the zero-based indices of two distinct elements whose sum equals target, or [] if no pair exists. Assume at most one solution. Example: nums = [1, 2, 4, 6, 9], target = 8 gives [1, 3]. Explain why two pointers work and justify each move.';});
-  $('solution-from-intent').addEventListener('click',()=>{practiceVisualKind='auto';$('solution-problem').value=document.getElementById('intent').value;});
+  $('solution-from-intent').addEventListener('click',()=>{practiceVisualKind='auto';pendingAttempt=document.getElementById('code').value;$('solution-problem').value=document.getElementById('intent').value;});
   $('solution-online').addEventListener('change',()=>{if(origin==='generated'){stop(true);$('lesson-voice-engine').value=locale==='zh-TW'&&$('solution-online').checked?'taiwan':'kokoro';render();}});
   let practiceVisualKind='auto';
   document.addEventListener('library-problem-selected',()=>{practiceVisualKind='auto';});
-  $('solution-problem').addEventListener('input',()=>{practiceVisualKind='auto';});
+  $('solution-problem').addEventListener('input',()=>{practiceVisualKind='auto';pendingAttempt='';});
   async function generateSolution(){
     if(preparing)return;
     if(!$('solution-problem').value.trim()){toast(t('Enter the complete problem first.'),true);return;}
-    stop(true);preparing=true;generatingSolution=true;render();$('solution-progress').textContent=t('Preparing the teaching script and diagrams. One model request; narration follows when ready.');
+    stop(true);awaitingLessonStart=false;deck=null;record=null;origin='none';$('lesson-live-captions').hidden=true;preparing=true;generatingSolution=true;render();$('solution-progress').textContent=t('Preparing the teaching script and diagrams. One model request; narration follows when ready.');
     try{
-      const lesson=await api('/api/lessons/generate',{problem:$('solution-problem').value,language:pageLanguage.speech,visualKind:practiceVisualKind});
+      const lesson=await api('/api/lessons/generate',{problem:$('solution-problem').value,code:pendingAttempt,pace:'brief',language:pageLanguage.speech,visualKind:practiceVisualKind});
       $('solution-assumptions').hidden=false;$('solution-assumptions').replaceChildren(node('h4',t('Assumptions to confirm')), ...lesson.assumptions.map(value=>node('p',value)));
       deck=solutionDeck(lesson);record={submission:{functionName:lesson.algorithm,code:'',cases:[]},evidence:{id:lesson.id,results:[]}};origin='generated';label=lesson.title;index=0;teacherStep=0;teacherAnswers.clear();voice=null;choices();
       const config=voiceSettings(locale,'generated');$('lesson-language').value=config.speech;$('lesson-voice-engine').value=locale==='zh-TW'&&$('solution-online').checked?'taiwan':'kokoro';
       $('solution-progress').textContent=t(lesson.cached?'Saved lesson ready.':'Lesson ready.');if($('solution-generation-details'))$('solution-generation-details').textContent=t('{0} · {1} tokens · {2}',lesson.model,lesson.totalTokens??'?',lesson.cached?t('Saved lesson reused'):t('Lesson generated'));
-      preparing=false;render();$('walkthrough-stage').scrollIntoView({block:'start'});play();
+      if(['kokoro','taiwan'].includes($('lesson-voice-engine').value))for(let chapter=0;chapter<deck.frames.length;chapter++){
+        $('solution-progress').textContent=t('Preparing smooth playback: {0} / {1}',chapter+1,deck.frames.length);await prepareFrameVoice(chapter);
+      }
+      $('solution-progress').textContent=t('Your complete lesson is ready.');preparing=false;awaitingLessonStart=true;render();$('lesson-ready').scrollIntoView({block:'center'});
     }catch(error){$('solution-progress').textContent=t(error.message);toast(t(error.message),true);}finally{preparing=false;generatingSolution=false;render();}
   }
+  $('teach-current-problem').addEventListener('click',()=>{
+    const contract=document.getElementById('intent').value.trim();if(!contract){toast(t('Add the question first. Your code can be unfinished or empty.'),true);return;}
+    const code=document.getElementById('code').value;if(code.length>8000){toast(t('Use a function of up to 8,000 characters for this lesson.'),true);return;}
+    const functionName=document.getElementById('function-name').value.trim()||/def\s+([A-Za-z_]\w*)/.exec(code)?.[1]||'solve';
+    document.dispatchEvent(new CustomEvent('practice-lesson-requested',{cancelable:true,detail:{title:document.getElementById('verification-task-title')?.value||'',contract,functionName,examples:[],code}}));
+  });
+  $('lesson-ready-play').addEventListener('click',()=>{if(preparing||!deck)return;awaitingLessonStart=false;render();if(!$('walkthrough-stage').classList.contains('theater'))document.getElementById('lesson-theater-toggle')?.click();$('walkthrough-stage').scrollIntoView({block:'start'});play();});
   $('solution-generate').addEventListener('click',()=>void generateSolution());
   document.addEventListener('practice-lesson-requested',event=>{
     const detail=event.detail;if(preparing||!detail||typeof detail.contract!=='string'||!Array.isArray(detail.examples))return;
     event.preventDefault();
     let transfer;try{transfer=practiceLessonInput(detail,pageLanguage.speech);}catch(error){toast(t(error.message),true);return;}
-    $('solution-problem').value=transfer.problem;
+    $('solution-problem').value=transfer.problem;pendingAttempt=typeof detail.code==='string'?detail.code:'';
     practiceVisualKind=detail.topic==='tree'?'tree':['bfs','dfs','topo','union','shortest','linked'].includes(detail.topic)?'graph':'auto';
     revealWorkspace('solution-generator-title');
     if(transfer.omittedExamples)toast(t('The complete question was preserved. {0} oversized examples were not included in the lesson request.',transfer.omittedExamples));
@@ -160,7 +178,7 @@ export function initWalkthrough({toast,api,onVerifySolution}){
   });
   $('lesson-example').replaceChildren(...lessonExamples.map(example=>{const option=node('option',t(example.title));option.value=example.id;return option;}));$('lesson-example').value='binary-last';
   $('lesson-example-open').addEventListener('click',async()=>{
-    if(preparing)return;stop(true);teacherStep=0;teacherAnswers.clear();preparing=true;let opened=false;render();
+    if(preparing)return;stop(true);awaitingLessonStart=false;teacherStep=0;teacherAnswers.clear();preparing=true;let opened=false;render();
     try{const report=await api('/api/lessons/example',{exampleId:$('lesson-example').value,execution:'docker'});deck=localizePresentation(buildExampleLesson(report));record=JSON.parse(JSON.stringify(report.before));origin='example';label=t(deck.context.lessonTitle);currentKey=`example:${report.exampleId}`;index=0;choices();$('walkthrough-case').value=String(deck.context.caseIndex);opened=true;toast(report.cached?t("Saved worked lesson reopened. No new execution."):t("Example and repair were executed. The lesson is ready to watch."));}
     catch(error){toast(error.message,true);}finally{preparing=false;render();}
     if(opened){const config=voiceSettings(locale,'example',localStorage.getItem(preferenceKey('invarith-lesson-voice-engine')));$('lesson-voice-engine').value=config.engine;$('lesson-language').value=config.speech;play();}

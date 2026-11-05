@@ -2,10 +2,14 @@ import {t} from './i18n.mjs';
 import {formatDateTime} from './date-format.mjs';
 
 // Keep an immediate browser copy before the debounced, account-scoped save.
-export function initVerificationTasks({api,capture,restore,isBusy,hasDraft}) {
+export function initVerificationTasks({api,capture,restore,isBusy,hasDraft,resumeDraft}) {
  const cacheKey='invarith-verification-tasks-v1',activeKey='invarith-active-verification-task';
  let rows=new Map(),active=null,timer,chain=Promise.resolve(true),restoring=false;
- try { const cached=JSON.parse(localStorage.getItem(cacheKey)||'[]');for(const row of cached)if(row?.id&&row.draft)rows.set(row.id,row);active=localStorage.getItem(activeKey)||null; } catch {}
+ try { const cached=JSON.parse(localStorage.getItem(cacheKey)||'[]');for(const row of cached)if(row?.id&&row.draft)rows.set(row.id,row);active=null; } catch {}
+ let recovered=null;
+ if(resumeDraft&&(resumeDraft.code?.trim()||resumeDraft.intent?.trim())&&![...rows.values()].some(r=>r.draft.code===resumeDraft.code&&r.draft.intent===resumeDraft.intent)){
+  const now=new Date().toISOString();recovered={id:crypto.randomUUID(),title:resumeDraft.functionName||t('Untitled question'),draft:{codeLanguage:resumeDraft.codeLanguage||'python',code:resumeDraft.code||'',functionName:resumeDraft.functionName||'',intent:resumeDraft.intent||'',cases:resumeDraft.cases||'[]'},activeRunId:null,baselineRunId:null,revision:0,createdAt:now,updatedAt:now,pending:true};rows.set(recovered.id,recovered);
+ }
  const make=(tag,className,text)=>{const el=document.createElement(tag);el.className=className;if(text)el.textContent=t(text);return el;};
  const host=make('section','verification-task-bar'),titleLabel=make('label','verification-task-title','Question title'),title=make('input',''),listLabel=make('label','verification-task-list','Saved questions'),list=make('select',''),actions=make('div','verification-task-actions'),save=make('button','secondary-button','Save now'),fresh=make('button','text-button','New question'),status=make('p','verification-task-status');
  host.setAttribute('aria-label',t('My verification questions'));title.id='verification-task-title';title.maxLength=120;title.placeholder=t('Name this question');list.id='verification-task-list';save.type=fresh.type='button';status.setAttribute('role','status');status.setAttribute('aria-live','polite');titleLabel.append(title);listLabel.append(list);actions.append(save,fresh);host.append(titleLabel,listLabel,actions,status);document.querySelector('.intent-section').prepend(host);
@@ -44,6 +48,6 @@ export function initVerificationTasks({api,capture,restore,isBusy,hasDraft}) {
  title.addEventListener('input',changed);list.addEventListener('change',()=>void open(list.value));save.onclick=()=>{if(!isBusy()){changed();void flush();}};fresh.onclick=async()=>{if(isBusy()||restoring)return;if(await flush())document.getElementById('new-task').click();};
  window.addEventListener('online',()=>{if(active)void flush();});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')void flush();});
  title.value=rows.get(active)?.title||'';render();status.textContent=t('Loading saved questions…');
- void (async()=>{try{const data=await api('/api/verification-tasks');for(const row of data.tasks){const local=rows.get(row.id);if(local&&row.id===active&&!local.pending&&local.revision!==row.revision){continue;}if(!local?.pending||signature(local)===signature(row))rows.set(row.id,{...row,pending:false});else if(local.revision===row.revision)rows.set(row.id,{...local,revision:row.revision});}remember();render();status.textContent=t('Progress saves automatically, even before you run tests.');if(active&&rows.get(active)?.pending)void flush();if(hasDraft&&!active)changed();}catch{status.textContent=t('Not synced. Your browser copy is kept. Try Save now again.');}})();
+ void (async()=>{try{const data=await api('/api/verification-tasks');if(recovered&&data.tasks.some(row=>['code','intent','functionName','cases'].every(key=>row.draft[key]===recovered.draft[key]))){rows.delete(recovered.id);recovered=null;}for(const row of data.tasks){const local=rows.get(row.id);if(local&&row.id===active&&!local.pending&&local.revision!==row.revision){continue;}if(!local?.pending||signature(local)===signature(row))rows.set(row.id,{...row,pending:false});else if(local.revision===row.revision)rows.set(row.id,{...local,revision:row.revision});}remember();render();status.textContent=t('Progress saves automatically, even before you run tests.');if(active&&rows.get(active)?.pending)void flush();if(recovered)void persist(recovered);if(hasDraft&&!active)changed();}catch{status.textContent=t('Not synced. Your browser copy is kept. Try Save now again.');}})();
  return {changed,reset,flush,hasActive:()=>Boolean(active)};
 }

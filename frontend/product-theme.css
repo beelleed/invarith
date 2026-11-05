@@ -432,3 +432,15 @@ html[data-theme=dark] body>dialog{color-scheme:dark;background:#24252d;color:#d9
 .product-shell .comparison-stats span,.product-shell .comparison-content>p,.product-shell .mutation-results :is(p,small){color:var(--ui-muted)}
 .product-shell .comparison-stats .fixed{color:var(--ui-good)}
 .product-shell .comparison-stats .regressed{color:var(--ui-warn)}
+.product-shell .security-status{background:var(--ui-soft);color:var(--ui-text);border:1px solid var(--ui-line)}
+.test-auto-preview{display:block;margin-top:6px;color:var(--ui-muted);font-size:11px;line-height:1.6}
+.workspace-teach-actions{display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap;flex-shrink:0;border-top:1px solid var(--ui-line);background:var(--ui-surface)}
+.workspace-teach-actions small{color:var(--ui-muted);font-size:11px}
+.lesson-live-captions{padding:14px 22px;margin:8px 0;background:#131922;color:#fff!important;border:1px solid #404858;border-radius:6px;font-size:17px;line-height:1.65;text-align:center;min-height:56px;box-sizing:border-box}
+.theater canvas{max-height:60vh!important}
+.theater .lesson-live-captions{position:sticky;bottom:72px;z-index:2;box-shadow:0 3px 16px #0004}
+.lesson-ready{padding:24px;margin:18px 0;background:var(--ui-raised);border:1px solid var(--ui-accent);border-radius:8px;color:var(--ui-text)}
+.lesson-ready strong{font-size:20px}.lesson-ready p{line-height:1.7}.lesson-ready button{margin-top:10px}
+.product-shell .design-board svg{max-height:none;overflow:visible}
+.product-shell .design-diagram-scroll{max-height:none;overflow-y:visible}
+.practice-load-starter{align-self:flex-start;margin:6px 0}

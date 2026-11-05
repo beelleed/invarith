@@ -76,7 +76,7 @@ export function initWorkspaceLayout(){
   const settings=fold('Playback settings',stage,[]);
   for(const selector of ['.lesson-playback-options','#lesson-chapters','#walkthrough-seek']){const control=document.querySelector(selector);const label=control?.previousElementSibling;if(label?.tagName==='LABEL')settings.append(label);if(control)settings.append(control);}
   stage.insertBefore(settings,document.getElementById('walkthrough-count'));
-  const theatre=make('button','secondary-button','Theater view');theatre.type='button';theatre.setAttribute('aria-pressed','false');
+  const theatre=make('button','secondary-button','Theater view');theatre.id='lesson-theater-toggle';theatre.type='button';theatre.setAttribute('aria-pressed','false');
   theatre.addEventListener('click',()=>{const expanded=stage.classList.toggle('theater');theatre.setAttribute('aria-pressed',String(expanded));theatre.textContent=t(expanded?'Exit theater view':'Theater view');});
   document.getElementById('walkthrough-play').closest('.walkthrough-actions').append(theatre);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){stage.classList.remove('theater');theatre.setAttribute('aria-pressed','false');theatre.textContent=t('Theater view');}});

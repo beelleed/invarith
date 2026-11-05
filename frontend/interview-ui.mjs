@@ -19,9 +19,9 @@ export function initInterview({api,toast,getHealth,isWorkspaceBusy,onWalkthrough
   window.addEventListener('pagehide',()=>window.clearInterval(clock),{once:true});
   const topicLabel=id=>t(({approach:'Approach',trace:'Walkthrough',tests:'Test design',diagnosis:'Diagnosis',changes:'Repair rationale',complexity:'Complexity',verification:'Verification plan'})[id]||id);
   const tokenTotal=()=>session?[...session.rounds.map(round=>round.questionTokens),session.question?.totalTokens,session.unansweredQuestion?.totalTokens,...session.hints.map(hint=>hint.totalTokens),session.feedback?.totalTokens].filter(Number.isFinite).reduce((a,b)=>a+b,0):0;
-  function apply(value,replace=false){
+  function apply(value,replace=false,fresh=false){
     const previousToken=session?.question?.token;session=value;storeActive();$('interview-history').value=session.id;
-    if(replace){const saved=remembered(session.id);draft={code:session.code,cases:JSON.stringify(session.ownCases,null,2),answer:'',whiteboard:session.whiteboard||initialBoard()};if(session.status==='active' && saved){draft.code=typeof saved.code==='string'?saved.code:draft.code;draft.cases=typeof saved.cases==='string'?saved.cases:draft.cases;try{if(saved.whiteboard)draft.whiteboard=validateBoard(saved.whiteboard);}catch{}draft.answer=saved.questionToken===session.question?.token?saved.answer || '':'';}}
+    if(replace){const saved=remembered(session.id);draft={code:fresh?'':session.code,cases:JSON.stringify(session.ownCases,null,2),answer:'',whiteboard:session.whiteboard||initialBoard()};if(session.status==='active' && saved){draft.code=typeof saved.code==='string'?saved.code:draft.code;draft.cases=typeof saved.cases==='string'?saved.cases:draft.cases;try{if(saved.whiteboard)draft.whiteboard=validateBoard(saved.whiteboard);}catch{}draft.answer=saved.questionToken===session.question?.token?saved.answer || '':'';}}
     else if(previousToken!==session.question?.token)draft.answer='';
     if(session.status==='finished'){draft.code=session.code;draft.cases=JSON.stringify(session.ownCases,null,2);draft.whiteboard=session.whiteboard||draft.whiteboard;}
     persist();render();document.dispatchEvent(new CustomEvent('interview-session-updated',{detail:{id:session.id,status:session.status}}));
@@ -29,7 +29,7 @@ export function initInterview({api,toast,getHealth,isWorkspaceBusy,onWalkthrough
   async function act(action,body={},replace=false){
     if(busy || isWorkspaceBusy())return;
     busy=true;render();
-    try{const result=await api(`/api/interviews/${action}`,body);apply(result,replace);if(action==='run'||action==='finish')document.dispatchEvent(new Event('interview-evidence-updated'));if(action==='finish')document.dispatchEvent(new CustomEvent('interview-study-updated'));toast(result.cached?t("Saved interview response reopened. No new model request."):action==='start'?t("Interview started. You can switch workspaces and return to this saved draft."):action==='run'?t("Your test evidence was saved."):action==='finish'?t("Interview finished. Curated evaluation cases are now visible."):t("Interview progress saved."));await refresh(false);}
+    try{const result=await api(`/api/interviews/${action}`,body);apply(result,replace,action==='start');if(action==='run'||action==='finish')document.dispatchEvent(new Event('interview-evidence-updated'));if(action==='finish')document.dispatchEvent(new CustomEvent('interview-study-updated'));toast(result.cached?t("Saved interview response reopened. No new model request."):action==='start'?t("Interview started. You can switch workspaces and return to this saved draft."):action==='run'?t("Your test evidence was saved."):action==='finish'?t("Interview finished. Curated evaluation cases are now visible."):t("Interview progress saved."));await refresh(false);}
     catch(error){toast(t(error.message),true);}finally{busy=false;render();}
   }
   async function refresh(restore=false){
@@ -40,6 +40,8 @@ export function initInterview({api,toast,getHealth,isWorkspaceBusy,onWalkthrough
     }catch(error){$('interview-list-status').textContent=error.message;render();return;}
     $('interview-list-status').textContent=sessions.length?t(sessions.length===1?"{0} saved interview. Reopening uses no model credits.":"{0} saved interviews. Reopening uses no model credits.", sessions.length):t("No saved interviews yet.");render();
   }
+  function syncCaseEditor(){if(session)document.dispatchEvent(new CustomEvent('interview-cases-updated',{detail:{id:session.id,value:draft.cases,code:draft.code,functionName:session.task.functionName,disabled:busy||isWorkspaceBusy()||session.status!=='active'||Boolean(expired())}}));}
+  document.addEventListener('interview-cases-ready',syncCaseEditor);
   function render(){
     const locked=busy || isWorkspaceBusy(),timedOut=Boolean(expired()),active=session?.status==='active',ai=getHealth()?.ai?.ready,docker=getHealth()?.runners?.docker?.ready;
     paintClock();expiryShown=timedOut;
@@ -56,10 +58,12 @@ export function initInterview({api,toast,getHealth,isWorkspaceBusy,onWalkthrough
     $('interview-current-question').textContent=t(session.question?.text) || (active?t("Discussion complete. You may run your own tests, then finish for evaluation."):t("Interview finished. Review the recorded evidence and optional feedback below."));
     $('interview-answer').value=draft.answer;$('interview-code').value=draft.code;$('interview-cases').value=draft.cases;
     for(const id of ['interview-answer','interview-code','interview-cases'])$(id).readOnly=locked || !active || timedOut;
+    syncCaseEditor();
     $('answer-interview').disabled=locked || !active || !session.question || timedOut || !draft.answer.trim() || (!ai && session.rounds.length+1<session.maxRounds);
     $('answer-interview').textContent=session.rounds.length+1===session.maxRounds?t("Save final answer · No AI"):t("Answer & continue · Uses model credits");
     $('interview-hint').hidden=session.mode!=='coaching';$('interview-hint').disabled=locked || !active || timedOut || (!ai && session.hints.length>0) || session.hints.length>=session.maxHints || draft.code!==session.code;
     $('interview-hint').textContent=session.hints.length===0?t("Request hint 1 · Free direction prompt"):t("Request hint {0} · Uses model credits", Math.min(session.hints.length+1,session.maxHints));
+    $('load-interview-starter').disabled=locked||!active||timedOut;
     $('save-interview-draft').disabled=locked || !active || timedOut;$('run-interview-tests').disabled=locked || !active || timedOut || !docker;$('finish-interview').disabled=locked || !active || !docker;
     $('retry-interview').hidden=session.status!=='finished'||Boolean(session.studyPlan);$('retry-interview').disabled=locked;
     $('interview-feedback').disabled=locked || active || (!ai && !session.feedback);$('interview-feedback').textContent=session.feedback?t("Reopen saved interviewer feedback"):t("Get interviewer feedback · Uses model credits");
@@ -92,14 +96,15 @@ export function initInterview({api,toast,getHealth,isWorkspaceBusy,onWalkthrough
   document.addEventListener('interview-study-open',async event=>{if(busy||isWorkspaceBusy()||!event.detail?.interviewId)return;event.preventDefault();busy=true;render();try{apply(await api('/api/interviews/'+event.detail.interviewId),true);revealWorkspace('interview-heading');}catch(error){toast(t(error.message),true);}finally{busy=false;render();}});
   $('open-interview').addEventListener('click',async()=>{if(busy || isWorkspaceBusy() || !$('interview-history').value)return;busy=true;render();try{apply(await api(`/api/interviews/${$('interview-history').value}`),true);}catch(error){toast(t(error.message),true);}finally{busy=false;render();}});
   $('interview-history').addEventListener('change',render);$('refresh-interviews').addEventListener('click',()=>refresh(false));
-  for(const [id,key] of [['interview-code','code'],['interview-cases','cases'],['interview-answer','answer']])$(id).addEventListener('input',()=>{draft[key]=$(id).value;persist();$('answer-interview').disabled=busy || !session?.question || expired() || !draft.answer.trim() || (!getHealth()?.ai?.ready && session.rounds.length+1<session.maxRounds);$('interview-hint').disabled=busy || expired() || (!getHealth()?.ai?.ready && session.hints.length>0) || session.hints.length>=session.maxHints || draft.code!==session.code;$('interview-draft-status').textContent=draft.code!==session.code || draft.cases!==JSON.stringify(session.ownCases,null,2)?t("Draft differs from the saved session. Save draft or run tests to save code and cases before requesting a hint."):t("Code and cases match the saved session.");});
+  for(const [id,key] of [['interview-code','code'],['interview-cases','cases'],['interview-answer','answer']])$(id).addEventListener('input',()=>{draft[key]=$(id).value;persist();if(key==='code')syncCaseEditor();$('answer-interview').disabled=busy || !session?.question || expired() || !draft.answer.trim() || (!getHealth()?.ai?.ready && session.rounds.length+1<session.maxRounds);$('interview-hint').disabled=busy || expired() || (!getHealth()?.ai?.ready && session.hints.length>0) || session.hints.length>=session.maxHints || draft.code!==session.code;$('interview-draft-status').textContent=draft.code!==session.code || draft.cases!==JSON.stringify(session.ownCases,null,2)?t("Draft differs from the saved session. Save draft or run tests to save code and cases before requesting a hint."):t("Code and cases match the saved session.");});
   $('answer-interview').addEventListener('click',()=>act('answer',{sessionId:session.id,questionToken:session.question?.token,answer:draft.answer,code:draft.code,whiteboard:draft.whiteboard}));
   $('interview-hint').addEventListener('click',()=>act('hint',{sessionId:session.id,level:session.hints.length+1,whiteboard:draft.whiteboard}));
   const withCases=action=>{let cases,invalidTestDraft=false;try{cases=JSON.parse(draft.cases);}catch{if(action!=='finish'){toast(t("Enter valid JSON test cases before saving or running."),true);return;}invalidTestDraft=true;}void act(action,{sessionId:session.id,code:draft.code,whiteboard:draft.whiteboard,cases,invalidTestDraft,execution:'docker'});};
+  $('load-interview-starter').addEventListener('click',()=>{if(!session||busy||session.status!=='active'||expired())return;$('interview-code').value=session.task.starterCode;$('interview-code').dispatchEvent(new Event('input',{bubbles:true}));});
   $('save-interview-draft').addEventListener('click',()=>withCases('draft'));$('run-interview-tests').addEventListener('click',()=>withCases('run'));
   $('finish-interview').addEventListener('click',()=>withCases('finish'));
   $('interview-feedback').addEventListener('click',()=>act('feedback',{sessionId:session.id}));
   $('export-interview').addEventListener('click',()=>{if(!session)return;const blob=new Blob([JSON.stringify(session,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=`invarith-interview-${session.id}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   $('interview-nav').addEventListener('click',()=>$('interview-heading').scrollIntoView({behavior:'smooth'}));
-  void refresh(true);return {sync:render};
+  void refresh(false);return {sync:render};
 }

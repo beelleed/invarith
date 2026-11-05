@@ -766,7 +766,7 @@ function openCaseEditor(index) {
     $('#argument-fields').replaceChildren(); item.args.forEach(value => addArgument(JSON.stringify(value)));
     $('#expected-input').value = JSON.stringify(item.expected ?? null); $('#case-edit-error').textContent = '';
     $('#case-dialog').dataset.kwargs=JSON.stringify(item.kwargs||{});
-    document.dispatchEvent(new CustomEvent('case-editor-open',{detail:{...item,functionName:$('#function-name').value.trim(),code:$('#code').value}}));
+    document.dispatchEvent(new CustomEvent('case-editor-open',{detail:{...item,newCase:index===null,functionName:$('#function-name').value.trim(),code:$('#code').value}}));
     $('#case-dialog').showModal();
   } catch (error) { toast(error.message, true); }
 }
@@ -1261,43 +1261,22 @@ $('#export-button').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 2000); toast(t("Submission and test evidence exported."));
 });
 
-loadExample(0, false);
-try {
-  let draft = JSON.parse(localStorage.getItem('invarith-draft-v1'));
-  const activeTask=localStorage.getItem('invarith-active-verification-task');
-  const taskDraft=JSON.parse(localStorage.getItem('invarith-verification-tasks-v1')||'[]').find(row=>row.id===activeTask)?.draft;
-  if(taskDraft)draft={...draft,...taskDraft};
-  if (draft && ['code', 'functionName', 'cases'].every(key => typeof draft[key] === 'string')) {
-    if (draft.learnerDraft && Number.isInteger(draft.learnerDraft.caseIndex) && typeof draft.learnerDraft.predictionText==='string' && typeof draft.learnerDraft.answer==='string') learnerDraft=draft.learnerDraft;
-    hasDraft = true;
-    selectedPracticeId=transferPractices.some(item=>item.id===draft.selectedPracticeId)?draft.selectedPracticeId:null;
-    const legacyIndex = legacyExampleCodes.indexOf(draft.code);
-    const legacyName = ['average', 'first_even', 'is_palindrome'][legacyIndex];
-    selectedExample = Object.hasOwn(challengePacks, draft.exampleName || '') ? draft.exampleName : examples.find(item => item.code === draft.code)?.functionName || legacyName || null;
-    confirmedContract = draft.confirmedContract === selectedExample ? selectedExample : null;
-    if (confirmedContract && draft.challengeEnabled) {
-      const pack = challengePacks[selectedExample];
-      challengeProvenance = { source: 'human-authored-example-pack', contract: pack.contract, confirmedByUser: true, cases: pack.cases.map(({ args, expected }) => ({ args, expected })) };
-    }
-    $('#confirm-contract').checked = Boolean(confirmedContract);
-    $('#code-language').value=draft.codeLanguage||'python';
-    $('#intent').value = typeof draft.intent === 'string' ? draft.intent : challengePacks[selectedExample]?.contract || '';
-    $('#code').value = legacyIndex >= 0 ? examples.find(item => item.functionName === legacyName).code : draft.code; $('#function-name').value = draft.functionName; $('#cases').value = draft.cases; editorChanged();
-  }
-} catch { /* A blocked storage API or old draft should not prevent a new session. */ }
+// Start a new workspace; saved drafts remain available through explicit resume.
+const resumeVerificationDraft=(()=>{try{return JSON.parse(localStorage.getItem('invarith-draft-v1')||'null');}catch{return null;}})();
+$('#code').value='';$('#intent').value='';$('#function-name').value='';$('#cases').value='[]';hasDraft=false;selectedExample=null;confirmedContract=null;editorChanged();
 walkthroughUI=initWalkthrough({toast,api,onVerifySolution:importLessonSolution});walkthroughUI.syncWorkspace(currentRecord(),traceIndex,Boolean(stale()));
 interviewUI=initInterview({api,toast,getHealth:()=>health,isWorkspaceBusy:()=>busy || hintBusy || planBusy || confirmingPlan || mentorBusy || historyBusy,onWalkthrough:(record,index,label)=>walkthroughUI.openEvaluation(record,index,label)});
 initWorkspaceLayout();
 checkHealth();
 renderTransferPractices();
-refreshHistory(true);
+refreshHistory(false);
 
 // Keep language drafts separate from shared intent and cases.
 let editorLanguage=$('#code-language').value;
 const syncCodeLanguage=()=>{document.querySelector('.studio-app')?.classList.toggle('non-python-editor',$('#code-language').value!=='python');const lang=codeLanguages.find(row=>row.id===$('#code-language').value)||codeLanguages[0];const filename=document.querySelector('.editor-tab .editor-filename');if(filename)filename.textContent=lang.file;const note=$('#code-language-note');if(note){note.hidden=lang.id==='python';note.textContent=t(languageInstructions(lang.id));}const icon=document.querySelector('.editor-tab .file-icon');if(icon)icon.textContent=({python:'Py',javascript:'JS',typescript:'TS',java:'Java',cpp:'C++',csharp:'C#'})[lang.id]||lang.label.split(' ')[0];};
 $('#code-language').addEventListener('change',()=>{const next=$('#code-language').value;try{localStorage.setItem('invarith-verify-language:'+($('#code').dataset.codeLanguage||editorLanguage),JSON.stringify({functionName:$('#function-name').value,code:$('#code').value}));let saved=JSON.parse(localStorage.getItem('invarith-verify-language:'+next)||'null');$('#code').value=saved?.functionName===$('#function-name').value?saved.code:languageStarter(next,$('#function-name').value,JSON.parse($('#cases').value));}catch{$('#code').value=languageStarter(next,$('#function-name').value);}editorLanguage=next;$('#code').dataset.codeLanguage=next;if(next!=='python')$('#execution-backend').value='docker';syncCodeLanguage();editorChanged();});
 syncCodeLanguage();
-verificationTasks=initVerificationTasks({api,hasDraft,isBusy:()=>busy||planBusy||confirmingPlan||hintBusy||historyBusy||mentorBusy||Boolean(interviewUI?.active?.()),
+verificationTasks=initVerificationTasks({api,hasDraft,resumeDraft:resumeVerificationDraft,isBusy:()=>busy||planBusy||confirmingPlan||hintBusy||historyBusy||mentorBusy||Boolean(interviewUI?.active?.()),
  capture:()=>({draft:{codeLanguage:$('#code-language').value,code:$('#code').value,functionName:$('#function-name').value,intent:$('#intent').value,cases:$('#cases').value},activeRunId:evidence?.id||null,baselineRunId:baseline?.evidence.id||null}),
  restore:async row=>{
   $('#new-task').click();
